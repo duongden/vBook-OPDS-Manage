@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build & Cloudflare
+dist/
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Decompiled APK & Raw Binaries (Giữ repo sạch, không commit APK bản quyền)
+decompiled/
+decompiled_ik9/
+decompiled_nq5/
+vbookapp.apk/
+decompiled_*/
+*.apk
+*.dex
+
+# Environment & Secret
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.sqlite
+*.sqlite3
+*.db
+coverage/
+.openai/
+
+# Session Handoff (Local context only)
+.agents/handoff.md
+.agents/handoff*
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
