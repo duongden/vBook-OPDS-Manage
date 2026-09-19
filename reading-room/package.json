@@ -1,0 +1,12 @@
+{
+  "name": "reading-room-opds",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "python3 scripts/build.py",
+    "start": "node server.mjs",
+    "dev": "AUTH_MODE=platform LOCAL_PREVIEW=1 node server.mjs",
+    "test": "node --test test/core.test.mjs"
+  }
+}

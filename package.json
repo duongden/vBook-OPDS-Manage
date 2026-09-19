@@ -1,0 +1,41 @@
+{
+  "name": "vbook-opds-gateway",
+  "version": "1.5.1",
+  "description": "Cloud-to-OPDS Protocol Adapter for vBook on Cloudflare Workers",
+  "main": "src/index.ts",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "wrangler dev --remote=false --show-interactive-dev-session=false",
+    "predeploy": "pnpm run build && pnpm run test",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "test": "tsx test/opds.test.ts && tsx --test test/library.test.ts",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "bundle": "wrangler deploy --dry-run --outdir dist",
+    "test:runtime": "node test/runtime.test.mjs",
+    "precommit": "pnpm run build && pnpm run test",
+    "test:reference": "python3 reading-room/scripts/build.py && node --test reading-room/test/*.test.mjs"
+  },
+  "keywords": [
+    "opds",
+    "vbook",
+    "google-drive",
+    "cloudflare-workers",
+    "hono"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "hono": "^4.7.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260919.1",
+    "jsdom": "26.1.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.135.0"
+  },
+  "packageManager": "pnpm@10.32.1"
+}
