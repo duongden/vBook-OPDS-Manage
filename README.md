@@ -47,7 +47,7 @@ pnpm audit
 - `bundle`: build Worker bằng Wrangler dry-run, không publish.
 - `test:runtime`: chạy bundle trên Miniflare với D1 cục bộ và Drive metadata giả lập; cần cổng localhost.
 
-Các test không dùng tài khoản/file thật và không thay cho kiểm tra cuối trên app vBook, Drive thật hoặc kiểm tra bố cục trình duyệt. Xem trạng thái trong [plan-to-do](docs/plan-to-do.md).
+Các test không dùng tài khoản/file thật và không thay cho kiểm tra cuối trên app vBook, Drive thật hoặc kiểm tra bố cục trình duyệt.
 
 ## Cách dùng
 

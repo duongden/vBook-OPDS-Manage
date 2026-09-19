@@ -43,3 +43,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Local planning notes
+docs/plan-to-do.md

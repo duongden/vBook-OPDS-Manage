@@ -16,7 +16,7 @@ Tham chiếu quản lý dùng AES-GCM với miền khóa riêng. Masking Folder 
 
 Feed/API thư viện mới dùng `private, no-store`; cache legacy và giới hạn tìm kiếm OPDS cũ giữ nguyên. Chi phí phụ thuộc mức sử dụng, không đảm bảo $0 vô hạn. Masking không biến file Drive công khai thành file riêng tư.
 
-Xem [README](../README.md), [kế hoạch và trạng thái](plan-to-do.md), [triển khai](deployment.md).
+Xem [README](../README.md), [triển khai](deployment.md).
 
 ---
 
