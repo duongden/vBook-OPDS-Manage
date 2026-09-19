@@ -1,0 +1,24 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage','--no-zygote']});
+ const page=await browser.newPage({viewport:{width:1440,height:1100}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:4173/');await page.locator('.book').first().waitFor();assert.equal(await page.locator('.book').count(),8);
+ await page.screenshot({animations:'disabled',path:'.test-output/desktop.png',fullPage:true});
+ await page.getByLabel('Search books').fill('Cartographer');assert.equal(await page.locator('.book').count(),1);
+ await page.getByLabel('Clear search',{exact:true}).click();await page.getByLabel('Filter by language').selectOption('vi');assert.equal(await page.locator('.book').count(),2);
+ await page.getByLabel('Filter by language').selectOption('');await page.getByRole('button',{name:'Poetry',exact:true}).click();assert.equal(await page.locator('.book').count(),2);
+ await page.getByLabel('Search books').fill('nomatchingbook');await page.getByRole('button',{name:'Clear all filters'}).click();assert.equal(await page.locator('.book').count(),8);
+ await page.getByRole('button',{name:'View The Cartographer’s Garden',exact:true}).click();await page.getByRole('dialog').waitFor();
+ await page.getByRole('button',{name:'Read sample',exact:true}).click();assert.equal(await page.locator('#sample-text').isVisible(),true);
+ const dl=page.waitForEvent('download');await page.getByRole('link',{name:'Download EPUB'}).click();const download=await dl;assert.equal(download.suggestedFilename(),'cartographers-garden-sample.epub');await download.saveAs('.test-output/download.epub');
+ await page.screenshot({animations:'disabled',path:'.test-output/detail.png'});await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog').isVisible(),false);
+ await page.getByRole('button',{name:'Feed & validation',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#check-status').textContent.includes('passed'));assert.equal((await page.locator('#check-status').textContent()).trim(),'6 passed');assert.equal(await page.locator('#entry-table tr').count(),8);
+ await page.getByRole('button',{name:'Raw feed XML'}).click();assert.match(await page.locator('#raw-xml').textContent(),/<feed xmlns=/);
+ await page.screenshot({animations:'disabled',path:'.test-output/feed.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Library',exact:true}).click();await page.screenshot({animations:'disabled',path:'.test-output/mobile.png',fullPage:true});
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow');
+ await page.getByRole('button',{name:'View The Cartographer’s Garden',exact:true}).click();await page.screenshot({animations:'disabled',path:'.test-output/mobile-detail.png'});await page.keyboard.press('Escape');
+ await page.goto('http://127.0.0.1:4173/?book=mua-gio');await page.getByRole('dialog').waitFor();assert.match(await page.locator('#detail-title').textContent(),/Mùa gió/);
+ assert.deepEqual(errors,[]);await browser.close();console.log('PASS: browsing, search, filters, empty state, detail, EPUB download, feed checks, deep links, mobile layout.');
+})().catch(e=>{console.error(e);process.exit(1)});

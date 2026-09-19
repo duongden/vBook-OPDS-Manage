@@ -1,0 +1,3 @@
+# Copy to .dev.vars for Wrangler local development. Never commit real values.
+GOOGLE_API_KEY="replace-with-google-drive-api-key"
+MASK_SECRET="replace-with-a-stable-random-secret-at-least-32-characters"

@@ -32,6 +32,8 @@ coverage/
 .openai/
 
 # Session Handoff (Local context only)
+.agents/
+.codex/
 .agents/handoff.md
 .agents/handoff*
 
