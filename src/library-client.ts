@@ -5,6 +5,9 @@ const $ = s => document.querySelector(s);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const langName = value => ({vi:'Tiếng Việt',en:'English',fr:'Français','zh-Hans':'中文',ja:'日本語',ko:'한국어'}[value] || value || 'Chưa rõ');
 const sizeName = value => {if(value === undefined || value === '')return '—';let n=Number(value),u=0;const units=['B','KB','MB','GB'];while(n>=1024&&u<3){n/=1024;u++;}return n.toLocaleString('vi',{maximumFractionDigits:1})+' '+units[u];};
+function savedTheme(){try{const value=localStorage.getItem('vbook-theme');if(value==='light'||value==='dark')return value;}catch{}return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
+function applyTheme(theme,persist=false){document.documentElement.dataset.theme=theme;const toggle=$('#theme-toggle'),dark=theme==='dark';toggle.textContent=dark?'☀ Sáng':'☾ Tối';toggle.setAttribute('aria-pressed',String(dark));toggle.setAttribute('aria-label',dark?'Chuyển sang giao diện sáng':'Chuyển sang giao diện tối');if(persist)try{localStorage.setItem('vbook-theme',theme);}catch{}}
+let theme=savedTheme();applyTheme(theme);
 let library=null,csrf='',pageItems=new Map(),scanItems=new Map(),selected=new Set(),view='grid',scanMode=false;
 let trail=[],nextCursor=null,busy=false,editing=null,scanQueue=[],scanSeen=new Set(),scanRunning=false,scanComplete=false,scanPages=0,scanController=null;
 let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0;
@@ -121,6 +124,7 @@ document.addEventListener('click',async event=>{
 document.addEventListener('change',event=>{if(event.target.dataset.select){const key=event.target.dataset.select;event.target.checked?selected.add(key):selected.delete(key);render();}});
 ['create','login','recovery'].forEach(id=>$('#'+id).addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget;submitForm(form,async()=>{const data=await api(id==='create'?'/api/libraries':id==='login'?'/api/session':'/api/recovery','POST',Object.fromEntries(new FormData(form)));form.reset();await enter(data);});}));
 $('#logout').addEventListener('click',async()=>{try{await api('/api/session','DELETE',{});leave();notice('Đã đăng xuất.');}catch(e){notice(e.message,true);}});
+$('#theme-toggle').addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';applyTheme(theme,true);});
 $('#account-button').addEventListener('click',()=>$('#account').showModal());
 $('#opds-button').addEventListener('click',()=>{renderConnection();$('#connection').showModal();});
 $('#copy-opds').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('#opds-url').value);$('#copy-opds').textContent='Đã sao chép';}catch{$('#opds-url').select();$('#copy-opds').textContent='Hãy sao chép link đã chọn';}});
