@@ -8,7 +8,7 @@ import app from '../src/index';
 import { extractFolderId } from '../src/drive';
 import { bookKey, hashPassword, checkPassword, seal } from '../src/library-security';
 import { libraryClient } from '../src/library-client';
-import { libraryHtml } from '../src/library-ui';
+import { libraryCss, libraryHtml } from '../src/library-ui';
 
 // Exercise actual migration/query SQL with SQLite, without emulating query results.
 class TestD1 {
@@ -90,6 +90,9 @@ test('managed UI is available without DB; legacy endpoints remain separate; JS p
   assert.equal((await app.request('https://library.example/api/session')).status,503);
   assert.equal((await app.request('https://library.example/legacy')).status,404);
   assert.equal((await app.request('https://library.example/assets/library.js')).status,200);
+  assert.match(libraryCss,/--control-height: 44px/);
+  assert.match(libraryCss,/\.view-toggle \{[^}]*height: var\(--control-height\)/s);
+  assert.match(libraryCss,/\.shelf-head nav \{[^}]*justify-content: flex-start/s);
   new Script(libraryClient);
 });
 test('creation uses encrypted source and hashes; session CSRF, Origin and account boundaries enforced', async()=>{
