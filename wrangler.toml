@@ -6,8 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "vbook-library"
-# Local development ID. Replace with the ID returned by `wrangler d1 create` before deployment.
-database_id = "00000000-0000-0000-0000-000000000001"
+database_id = "f32d4e5f-1695-4f3e-8e67-94ee394708f7"
 migrations_dir = "migrations"
 
 [vars]
