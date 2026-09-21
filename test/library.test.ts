@@ -98,6 +98,8 @@ test('creation uses encrypted source and hashes; session CSRF, Origin and accoun
   assert.ok(!JSON.stringify(stored).includes(ROOT));
   assert.ok(!JSON.stringify(stored).includes('long-password'));assert.ok(!JSON.stringify(stored).includes(a.opds.password));
   assert.match(stored.root_token as string,/^m_/);
+  assert.match(a.library.shortId,/^[\w-]{12}$/);
+  assert.equal(a.opds.url,'https://library.example/o/'+a.library.shortId);
   assert.equal((await h.req(base(a)+'/items')).status,200);
   assert.equal((await h.req('/api/libraries/another/items')).status,403);
   assert.equal((await h.req(base(a)+'/opds-credentials','POST',{}, {'X-CSRF-Token':'wrong'})).status,403);
@@ -106,6 +108,7 @@ test('creation uses encrypted source and hashes; session CSRF, Origin and accoun
   const noSession=await h.req(base(a)+'/items','GET',undefined,{Cookie:'',...auth(a)});assert.equal(noSession.status,401);
   assert.equal((await h.req('/library/'+a.library.id+'/opds?auth='+btoa('attacker:pass'),'GET',undefined,{Authorization:'Basic '+btoa('attacker:pass')})).status,401);
   assert.equal((await h.req('/library/'+a.library.id+'/opds')).status,401);
+  assert.equal((await h.req('/o/'+a.library.shortId)).status,401);
   const csrfRes=await h.req('/api/session');assert.match(csrfRes.headers.get('cache-control')!,/no-store/);
 });
 test('metadata survives queries, appears in XML and JSON, can be reset; download redirects', async()=>{
@@ -125,8 +128,10 @@ test('metadata survives queries, appears in XML and JSON, can be reset; download
   assert.equal(parsed.querySelector('parsererror'),null);
   assert.equal(parsed.getElementsByTagNameNS('http://purl.org/dc/terms/','language')[0].textContent,'vi');
   parserWindow.close();
-  const feed=await(await h.req('/library/'+a.library.id+'/opds','GET',undefined,{...auth(a),Accept:'application/opds+json'})).json() as any;
+  const feed=await(await h.req('/o/'+a.library.shortId,'GET',undefined,{...auth(a),Accept:'application/opds+json'})).json() as any;
   assert.deepEqual(feed.publications[0].metadata.language,['vi']);assert.equal(feed.publications[0].metadata.author[0].name,'Tác giả');
+  assert.equal(feed.links.find((l:any)=>l.rel[0]==='start').href,'https://library.example/o/'+a.library.shortId);
+  assert.match(feed.publications[0].links[0].href,new RegExp('/o/'+a.library.shortId+'/d\\?ref='));
   const next=feed.links.find((l:any)=>l.rel[0]==='next').href;
   const second=await(await h.req(new URL(next).pathname+new URL(next).search,'GET',undefined,{...auth(a),Accept:'application/opds+json'})).json() as any;
   assert.equal(second.publications.length,3);assert.match(second.publications[0].metadata.title,/\.cbr$/);

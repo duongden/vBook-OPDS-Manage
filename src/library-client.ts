@@ -18,7 +18,7 @@ const endpoint = suffix => '/api/libraries/'+library.id+suffix;
 function tab(name){document.querySelectorAll('.access-form').forEach(f=>f.hidden=f.id!==name);document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));}
 function showSecrets(data){if(data.opds)activeOpds=data.opds;if(data.recoveryCode)recoveryCode=data.recoveryCode;renderConnection();$('#connection').showModal();}
 function renderConnection(){
- if(!library)return;$('#opds-url').value=location.origin+'/library/'+library.id+'/opds';
+ if(!library)return;$('#opds-url').value=location.origin+(library.shortId?'/o/'+library.shortId:'/library/'+library.id+'/opds');
  $('#secret-values').innerHTML='<div class="secret">Mã thư viện<code>'+escapeHtml(library.id)+'</code></div>'+
  (activeOpds?'<div class="secret">Tài khoản OPDS: <strong>reader</strong><br>Mật khẩu OPDS (lưu lại ngay)<code>'+escapeHtml(activeOpds.password)+'</code></div>':'')+
  (recoveryCode?'<div class="secret">Mã khôi phục — lưu riêng, không nhập vào vBook<code>'+escapeHtml(recoveryCode)+'</code></div>':'');

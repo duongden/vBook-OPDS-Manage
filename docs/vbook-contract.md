@@ -4,8 +4,8 @@
 
 ## Bổ sung v1.5.0: thư viện quản lý
 
-- Feed mới: `/library/:id/opds`; tìm kiếm dùng `q`, thư mục dùng `folder`, phân trang dùng `cursor`. Tham chiếu được mã hóa và ràng buộc thư viện.
-- Acquisition: `/library/:id/download?ref=...`, yêu cầu Basic Auth OPDS riêng, redirect Drive giữ `confirm=t`.
+- Feed mới: `/o/:shortId`; route `/library/:id/opds` được giữ để tương thích. Tìm kiếm dùng `q`, thư mục dùng `folder`, phân trang dùng `cursor`. Tham chiếu được mã hóa và ràng buộc thư viện.
+- Acquisition của route ngắn: `/o/:shortId/d?ref=...`, yêu cầu Basic Auth OPDS riêng, redirect Drive giữ `confirm=t`.
 - Username/password OPDS chỉ đọc, không cấp quyền quản lý. Cookie quản lý không thay thế Basic Auth feed. Không xét `?auth=` ở route mới.
 - XML bổ sung tác giả, `dc:language`, category, summary/content, link bìa khi có; JSON có author, language, subject, description, images tương ứng.
 - Tên hiển thị có thể được sửa; tiêu đề OPDS luôn giữ phần mở rộng thật. File Drive không đổi tên.

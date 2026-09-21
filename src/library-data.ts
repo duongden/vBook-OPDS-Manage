@@ -3,7 +3,7 @@ import { bookKey, seal, stringInput, fail } from './library-security';
 import { cleanBookTitle } from './opds';
 
 export interface Library {
-  id: string; name: string; root_token: string; username: string;
+  id: string; short_id: string; name: string; root_token: string; username: string;
   password_hash: string; recovery_hash: string; opds_hash: string; created_at: number; auth_version: number;
 }
 export interface Override {

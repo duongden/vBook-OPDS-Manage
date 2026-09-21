@@ -5,7 +5,7 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { extractFolderId, fetchDriveFolder, searchDriveFolder } from './drive';
 import { maskFolderId, unmaskFolderId } from './crypto';
 import { Library, getLibrary, presentItems, saveOverride, validateOverrides } from './library-data';
-import { bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomToken, seal, stringInput, unseal } from './library-security';
+import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomToken, seal, stringInput, unseal } from './library-security';
 import { managedFeed, XML_TYPE } from './library-feed';
 
 export interface LibraryEnv { DB: D1Database; MASK_SECRET: string; GOOGLE_API_KEY: string }
@@ -17,7 +17,7 @@ const COOKIE = '__Host-vbook_session';
 const api = libraryApp;
 
 api.use('*', async (c, next) => {
-  if (!/^\/(?:api\/(?:libraries|session|recovery)(?:\/|$)|library\/)/.test(c.req.path)) { await next(); return; }
+  if (!/^\/(?:api\/(?:libraries|session|recovery)(?:\/|$)|library\/|o\/)/.test(c.req.path)) { await next(); return; }
   c.header('Cache-Control', 'private, no-store');
   c.header('X-Content-Type-Options', 'nosniff');
   c.header('Referrer-Policy', 'no-referrer');
@@ -79,10 +79,12 @@ async function session(c: C): Promise<Session> {
   if (!['GET', 'HEAD'].includes(c.req.method) && !equal(c.req.header('X-CSRF-Token') || '', row.csrf)) fail(403, 'Phiên thao tác không hợp lệ. Hãy tải lại trang.');
   return row;
 }
-function publicLibrary(l: Library) { return { id: l.id, name: l.name, username: l.username, createdAt: l.created_at }; }
-function credentials(c: C, id: string, password: string) {
-  return { url: `${new URL(c.req.url).origin}/library/${id}/opds`, username: 'reader', password };
+function publicLibrary(l: Library) { return { id: l.id, shortId: l.short_id, name: l.name, username: l.username, createdAt: l.created_at }; }
+function credentials(c: C, library: Pick<Library, 'id' | 'short_id'>, password: string) {
+  const path = library.short_id ? `/o/${library.short_id}` : `/library/${library.id}/opds`;
+  return { url: `${new URL(c.req.url).origin}${path}`, username: 'reader', password };
 }
+const newShortId = () => base64url(crypto.getRandomValues(new Uint8Array(9)));
 
 api.post('/api/libraries', async c => {
   await rateLimit(c, 'create', 5);
@@ -104,11 +106,12 @@ api.post('/api/libraries', async c => {
   if (!res.ok) fail(400, 'Không đọc được thư mục. Kiểm tra chia sẻ “Bất kỳ ai có đường liên kết”.');
   const meta = await res.json() as { mimeType?: string };
   if (meta.mimeType !== 'application/vnd.google-apps.folder') fail(400, 'Link phải trỏ tới thư mục Drive.');
-  const id = crypto.randomUUID(), recovery = randomToken(), opds = randomToken();
-  await c.env.DB.prepare('INSERT INTO libraries (id, name, root_token, username, password_hash, recovery_hash, opds_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(id, name, await maskFolderId(folder, c.env.MASK_SECRET), username, await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(recovery), await digest(`reader:${opds}`), Date.now()).run();
+  const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomToken(), opds = randomToken();
+  await c.env.DB.prepare('INSERT INTO libraries (id, short_id, name, root_token, username, password_hash, recovery_hash, opds_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, shortId, name, await maskFolderId(folder, c.env.MASK_SECRET), username, await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(recovery), await digest(`reader:${opds}`), Date.now()).run();
   const csrf = await startSession(c, id, 0);
-  return c.json({ library: { id, name, username }, csrf, recoveryCode: recovery, opds: credentials(c, id, opds) }, 201);
+  const library = { id, short_id: shortId };
+  return c.json({ library: { id, shortId, name, username }, csrf, recoveryCode: recovery, opds: credentials(c, library, opds) }, 201);
 });
 api.post('/api/session', async c => {
   await rateLimit(c, 'login');
@@ -145,7 +148,7 @@ api.post('/api/recovery', async c => {
     .bind(await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(next), await digest(`reader:${opds}`), id, hashed, lib.auth_version).run();
   if (updated.meta.changes !== 1) fail(409, 'Mã khôi phục đã được sử dụng.');
   await c.env.DB.prepare('DELETE FROM sessions WHERE library_id = ? AND auth_version < ?').bind(id, lib.auth_version + 1).run();
-  return c.json({ library: publicLibrary(lib), csrf: await startSession(c, id, lib.auth_version + 1), recoveryCode: next, opds: credentials(c, id, opds) });
+  return c.json({ library: publicLibrary(lib), csrf: await startSession(c, id, lib.auth_version + 1), recoveryCode: next, opds: credentials(c, lib, opds) });
 });
 
 api.use('/api/libraries/:id/*', async (c, next) => {
@@ -167,7 +170,7 @@ api.post('/api/libraries/:id/password', async c => {
 api.post('/api/libraries/:id/opds-credentials', async c => {
   const password = randomToken(), lib = c.get('library');
   await c.env.DB.prepare('UPDATE libraries SET opds_hash = ? WHERE id = ?').bind(await digest(`reader:${password}`), lib.id).run();
-  return c.json({ opds: credentials(c, lib.id, password) });
+  return c.json({ opds: credentials(c, lib, password) });
 });
 api.post('/api/libraries/:id/delete', async c => {
   const body = await jsonBody(c), lib = c.get('library');
@@ -236,9 +239,8 @@ api.post('/api/libraries/:id/language', async c => {
   return c.json({ language: language || '', count: keys.length });
 });
 
-api.use('/library/:id/*', async (c, next) => {
-  const id = c.req.param('id');
-  const lib = await c.env.DB.prepare('SELECT * FROM libraries WHERE id = ?').bind(id).first<Library>();
+async function requireOpds(c: C, next: () => Promise<void>, field: 'id' | 'short_id', value: string) {
+  const lib = await c.env.DB.prepare(`SELECT * FROM libraries WHERE ${field} = ?`).bind(value).first<Library>();
   let supplied = '';
   try { const h = c.req.header('Authorization') || ''; if (/^Basic /i.test(h)) supplied = atob(h.slice(6)); } catch {}
   const valid = equal(await digest(supplied), lib?.opds_hash || 'invalid');
@@ -248,13 +250,17 @@ api.use('/library/:id/*', async (c, next) => {
     return c.json({ error: 'Cần tài khoản OPDS của thư viện.' }, 401);
   }
   c.set('library', lib); await next();
-});
-api.get('/library/:id/opds', async c => {
+}
+api.use('/library/:id/*', (c, next) => requireOpds(c, next, 'id', c.req.param('id')));
+api.use('/o/:shortId', (c, next) => requireOpds(c, next, 'short_id', c.req.param('shortId')));
+api.use('/o/:shortId/*', (c, next) => requireOpds(c, next, 'short_id', c.req.param('shortId')));
+
+async function serveOpds(c: C, feedPath: string, downloadPath: string) {
   const lib = c.get('library'), url = new URL(c.req.url), q = (c.req.query('q') || '').trim();
   if (q.length > 200) fail(400, 'Từ khóa tối đa 200 ký tự.');
   const data = await readPage(c, lib, { folder: c.req.query('folder'), cursor: c.req.query('cursor'), q });
   // Construct canonical links from known parameters; discard injected auth/key parameters.
-  const start = `${url.origin}/library/${lib.id}/opds`;
+  const start = `${url.origin}${feedPath}`;
   const self = new URL(start);
   if (c.req.query('folder')) self.searchParams.set('folder', c.req.query('folder')!);
   if (q) self.searchParams.set('q', q);
@@ -263,11 +269,15 @@ api.get('/library/:id/opds', async c => {
   const searchTemplate = search.href + (search.search ? '&' : '?') + 'q={searchTerms}';
   const next = new URL(self); if (data.nextCursor) next.searchParams.set('cursor', data.nextCursor);
   const json = (c.req.header('Accept') || '').includes('application/opds+json');
-  return c.body(managedFeed({ libraryId: lib.id, title: q ? `Tìm kiếm: ${q}` : lib.name, origin: url.origin, self: self.href, start, search: searchTemplate, next: data.nextCursor ? next.href : undefined, ...data }, json), 200,
+  return c.body(managedFeed({ libraryId: lib.id, title: q ? `Tìm kiếm: ${q}` : lib.name, feedUrl: start, downloadUrl: `${url.origin}${downloadPath}`, self: self.href, start, search: searchTemplate, next: data.nextCursor ? next.href : undefined, ...data }, json), 200,
     { 'Content-Type': `${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`, Vary: 'Accept, Authorization' });
-});
-api.get('/library/:id/download', async c => {
+}
+async function downloadBook(c: C) {
   const lib = c.get('library');
   const item = await unseal(c.env.MASK_SECRET, c.req.query('ref') || '', lib.id, 'book');
   return c.redirect(`https://drive.google.com/uc?export=download&id=${item.id}&confirm=t`, 302);
-});
+}
+api.get('/library/:id/opds', c => serveOpds(c, `/library/${c.get('library').id}/opds`, `/library/${c.get('library').id}/download`));
+api.get('/library/:id/download', downloadBook);
+api.get('/o/:shortId', c => serveOpds(c, `/o/${c.get('library').short_id}`, `/o/${c.get('library').short_id}/d`));
+api.get('/o/:shortId/d', downloadBook);

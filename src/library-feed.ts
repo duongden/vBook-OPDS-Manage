@@ -3,19 +3,18 @@ import { escapeXml as e } from './opds';
 
 export const XML_TYPE = 'application/atom+xml;profile=opds-catalog';
 export interface ManagedFeed {
-  libraryId: string; title: string; origin: string; self: string; start: string;
+  libraryId: string; title: string; feedUrl: string; downloadUrl: string; self: string; start: string;
   search: string; next?: string; folderKey: string; items: LibraryItem[];
 }
 export function managedFeed(f: ManagedFeed, json: boolean): string {
   const type = json ? 'application/opds+json' : XML_TYPE;
-  const base = `${f.origin}/library/${f.libraryId}`;
   const links = [
     { rel: ['self'], href: f.self, type }, { rel: ['start'], href: f.start, type },
     { rel: ['search'], href: f.search, type },
     ...(f.next ? [{ rel: ['next'], href: f.next, type }] : []),
   ];
-  const folderUrl = (i: LibraryItem) => `${base}/opds?folder=${i.ref}`;
-  const download = (i: LibraryItem) => `${base}/download?ref=${i.ref}`;
+  const folderUrl = (i: LibraryItem) => `${f.feedUrl}?folder=${i.ref}`;
+  const download = (i: LibraryItem) => `${f.downloadUrl}?ref=${i.ref}`;
   const identifier = `urn:vbook:library:${f.libraryId}:${f.folderKey}`;
   const now = new Date().toISOString();
   if (json) return JSON.stringify({
