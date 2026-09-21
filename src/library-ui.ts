@@ -351,8 +351,9 @@ hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
 }
 
 @media (min-width: 1100px) {
-  .wrap { padding-inline: 40px; }
+  .wrap { max-width: none; padding-inline: clamp(40px, 4vw, 72px); }
   .hero { gap: 72px; }
+  .entry-panel { max-width: none; padding: 32px; }
   .books { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 34px 24px; }
 }
 
