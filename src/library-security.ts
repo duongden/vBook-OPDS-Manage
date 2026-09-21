@@ -55,6 +55,24 @@ async function tokenKey(secret: string): Promise<CryptoKey> {
   const bytes = await crypto.subtle.digest('SHA-256', enc.encode(`managed-library:v1:${secret}`));
   return crypto.subtle.importKey('raw', bytes, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
+export async function protectData(secret: string, purpose: string, value: Record<string, unknown>): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const payload = enc.encode(JSON.stringify({ version: 1, purpose, value }));
+  const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await tokenKey(secret), payload));
+  const bytes = new Uint8Array(12 + encrypted.length);
+  bytes.set(iv); bytes.set(encrypted, 12);
+  return base64url(bytes);
+}
+export async function revealData<T extends Record<string, unknown>>(secret: string, purpose: string, token: string): Promise<T> {
+  try {
+    if (!token || token.length > 16000 || !/^[\w-]+$/.test(token)) throw new Error();
+    const bytes = decode(token);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, await tokenKey(secret), bytes.slice(12));
+    const payload = JSON.parse(new TextDecoder().decode(plain));
+    if (payload?.version !== 1 || payload?.purpose !== purpose || !payload.value || typeof payload.value !== 'object') throw new Error();
+    return payload.value as T;
+  } catch { return fail(400, 'Dữ liệu mã hóa không hợp lệ. Kiểm tra MASK_SECRET.'); }
+}
 export interface Resource {
   lib: string;
   kind: 'folder' | 'book' | 'page';

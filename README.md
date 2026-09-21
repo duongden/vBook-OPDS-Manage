@@ -1,12 +1,14 @@
-# VBook Library / OPDS Gateway — v1.5.1
+# VBook Library / OPDS Gateway — v1.6.0
 
-Giao diện quản lý thư viện Google Drive dành cho vBook. Web dùng để kiểm tra sách và chỉnh sửa thông tin; vBook dùng để tải và đọc qua OPDS 1.2 hoặc 2.0.
+Giao diện quản lý thư viện Google Drive và các catalog OPDS được chia sẻ dành cho vBook. Web có thể gộp hai loại nguồn vào một link OPDS ngắn, có tài khoản riêng.
 
 **Không lưu nội dung sách, không ghi vào Drive.** D1 chỉ lưu tài khoản, cấu hình thư viện, phiên đăng nhập và metadata chỉnh sửa. Nguồn Drive cần được chia sẻ “Bất kỳ ai có đường liên kết”; mật khẩu Gateway không thay đổi quyền truy cập file trên Google.
 
 ## Đã có
 
-- Tạo thư viện với một thư mục Drive gốc và tài khoản quản lý riêng.
+- Tạo thư viện bằng một thư mục Drive, danh sách OPDS có sẵn, hoặc cả hai.
+- Thêm tối đa 10 URL OPDS mỗi lần; bật/tắt, sao chép link proxy ngắn hoặc xóa từng nguồn.
+- Gộp sách Drive và các catalog OPDS vào một URL `/o/:short_id`; credential của nguồn được mã hóa trước khi lưu.
 - Kệ bìa / bảng danh sách, duyệt thư mục và phân trang.
 - Tìm/lọc trong dữ liệu đã tải theo tên, tác giả, ngôn ngữ, định dạng.
 - Quét toàn thư viện theo từng trang, không giới hạn 35 thư mục hoặc 3 cấp; tạm dừng/thử lại, đếm file duy nhất và hiển thị tiến độ.
@@ -50,11 +52,15 @@ Các test không dùng tài khoản/file thật và không thay cho kiểm tra c
 
 ## Hướng dẫn sử dụng
 
-Người dùng thông thường chỉ cần ứng dụng **vBook**, một thư mục Google Drive chứa sách và địa chỉ VBook Library do người quản trị cung cấp. Không cần cài máy chủ hoặc tự tạo API key.
+Người dùng thông thường chỉ cần ứng dụng **vBook** và ít nhất một nguồn: thư mục Google Drive chứa sách hoặc các link OPDS được chia sẻ. Không cần tự tạo API key nếu người quản trị đã triển khai VBook Library.
 
 > Tất cả tên, đường dẫn, mã thư viện và mật khẩu trong phần hướng dẫn và hình minh họa dưới đây đều là dữ liệu giả.
 
-### 1. Chuẩn bị Google Drive
+### 1. Chuẩn bị nguồn sách
+
+Nếu đã có link OPDS do người khác chia sẻ, bạn có thể bỏ qua phần Google Drive và dùng link đó ở bước 3.
+
+Nếu dùng Google Drive:
 
 1. Tạo một thư mục và đưa các file EPUB, PDF, CBZ, CBR, MOBI hoặc TXT vào đó. Có thể dùng thư mục con để phân loại.
 2. Chọn **Chia sẻ** → **Bất kỳ ai có đường liên kết** → quyền **Người xem**.
@@ -68,7 +74,7 @@ https://drive.google.com/drive/folders/THU_MUC_MAU_123
 
 ### 2. Tạo thư viện
 
-Mở VBook Library, chọn **Tạo thư viện**, rồi nhập link Drive, tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự.
+Mở VBook Library, chọn **Tạo thư viện**, rồi nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự. Link Drive không bắt buộc nếu bạn chỉ dùng nguồn OPDS.
 
 ![Giao diện tạo thư viện với dữ liệu giả](docs/images/tao-thu-vien.png)
 
@@ -80,7 +86,19 @@ Bấm **Tạo thư viện & link OPDS** và lưu ngay:
 
 Mã khôi phục và mật khẩu OPDS chỉ hiển thị khi vừa được cấp. Không nhập mật khẩu quản lý vào vBook.
 
-### 3. Quản lý sách
+### 3. Thêm các link OPDS đã có
+
+Trong trang quản lý, bấm **Nguồn OPDS**. Dán mỗi URL trên một dòng; mỗi lần có thể thêm từ 1 đến 10 URL.
+
+![Giao diện quản lý nguồn OPDS với dữ liệu giả](docs/images/nguon-opds.png)
+
+- Nguồn công khai: để trống username và mật khẩu.
+- Nguồn có Basic Auth: nhập tài khoản mà chủ nguồn đã cấp. Một lần thêm dùng chung tài khoản cho các URL trong ô.
+- Sau khi kiểm tra thành công, dùng công tắc để bật/tắt nguồn, biểu tượng sao chép để lấy link ngắn riêng, hoặc biểu tượng thùng rác để xóa.
+
+Tài khoản nguồn không hiển thị lại trên giao diện. Nếu cần thay URL hoặc credential, hãy xóa nguồn cũ và thêm lại. Chỉ dùng URL `https://` công khai; địa chỉ localhost hoặc mạng nội bộ bị từ chối.
+
+### 4. Quản lý sách Drive
 
 ![Giao diện quản lý thư viện với dữ liệu giả](docs/images/quan-ly-thu-vien.png)
 
@@ -88,7 +106,9 @@ Bạn có thể duyệt thư mục, đổi giữa kệ và bảng, tìm/lọc s�
 
 Các thay đổi chỉ tác động đến thông tin hiển thị trong thư viện. Tên và nội dung file trên Drive không bị sửa.
 
-### 4. Kết nối vBook
+Nếu thư viện chỉ có nguồn OPDS, khu vực sách Drive sẽ trống; đây không phải lỗi.
+
+### 5. Kết nối vBook
 
 Trong trang quản lý, bấm **Kết nối vBook**.
 
@@ -108,7 +128,7 @@ Username: reader
 Password: mat-khau-mau-khong-dung-that
 ```
 
-Feed tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi sửa metadata, hãy làm mới catalog trong vBook vì ứng dụng có thể giữ cache riêng.
+Đây là catalog tổng hợp: trang đầu chứa các nguồn OPDS đã bật cùng sách/thư mục Drive. Feed Drive tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi thay đổi nguồn hoặc metadata, hãy làm mới catalog trong vBook vì ứng dụng có thể giữ cache riêng.
 
 ### Đăng nhập lại và khôi phục
 
@@ -128,6 +148,9 @@ Bấm biểu tượng mặt trăng hoặc mặt trời trên thanh đầu trang.
 | vBook báo sai tài khoản | Username OPDS luôn là `reader`; không dùng tên đăng nhập quản lý |
 | vBook báo sai mật khẩu | Dùng mật khẩu OPDS, không dùng mật khẩu quản lý |
 | Không thấy thông tin vừa sửa | Làm mới hoặc mở lại kho OPDS trong vBook |
+| Không thấy nguồn OPDS vừa thêm | Kiểm tra nguồn đang bật, rồi làm mới catalog trong vBook |
+| Không thêm được nguồn OPDS | URL phải dùng HTTPS công khai và trả về OPDS XML/JSON hợp lệ; kiểm tra lại tài khoản nguồn |
+| Link nguồn ngừng hoạt động | Nguồn bên ngoài có thể đổi URL/credential hoặc tạm ngừng; xóa rồi thêm lại nếu thông tin đã đổi |
 | Quên mật khẩu OPDS | Mở **Kết nối vBook** và tạo lại mật khẩu OPDS |
 | Quét bị dừng | Chờ khoảng một phút rồi bấm **Tiếp tục / thử lại** |
 | Ảnh bìa không hiện | Dùng URL `https://`; máy chủ ảnh có thể chặn truy cập ngoài |
@@ -138,17 +161,19 @@ Không chia sẻ mã khôi phục hoặc mật khẩu, không chụp màn hình 
 ## Giới hạn và dữ liệu lưu
 
 - Không có trình đọc online, upload bìa, OAuth Drive hoặc quyền ghi Drive.
+- Proxy OPDS chỉ theo link cùng hostname với URL nguồn. Link sang hostname khác được giữ trực tiếp và không nhận credential đã lưu.
+- Mỗi feed nguồn được giới hạn 2 MB và thời gian kết nối 20 giây. Việc đọc sách phụ thuộc vào tình trạng máy chủ OPDS bên ngoài.
 - Không lưu database toàn bộ danh mục. Kết quả quét chỉ ở bộ nhớ trang; reload phải quét lại. Kho lớn tiêu tốn quota Drive và bộ nhớ trình duyệt.
 - Tìm/lọc **web** áp dụng trên tập đã tải; chỉ đủ toàn kho sau khi quét xong.
 - Tìm kiếm **OPDS** giữ thuật toán Gateway: tên file Drive, tối đa 3 cấp/35 thư mục con; chưa tìm theo tên chỉnh sửa.
-- D1 lưu token thư mục mã hóa, khóa file HMAC, metadata, URL bìa; không gọi đây là hệ thống “không lưu dữ liệu”.
+- D1 lưu token thư mục, URL và credential nguồn OPDS dưới dạng mã hóa, khóa file HMAC, metadata và URL bìa; không gọi đây là hệ thống “không lưu dữ liệu”.
 - Ảnh tải trực tiếp từ URL trên trình duyệt/vBook; backend không tải hoặc lưu ảnh. Host ảnh có thể chặn truy cập hoặc URL hết hạn.
 - Xóa thư viện xóa dữ liệu hoạt động trong D1; dữ liệu vẫn có thể nằm trong thời hạn backup của nhà cung cấp.
 - Giữ `MASK_SECRET` ổn định và sao lưu. Đổi secret làm hỏng token nguồn và ánh xạ metadata hiện có; chưa có migration đổi khóa.
 
 ## Triển khai
 
-Yêu cầu Node.js 22.13+, pnpm, tài khoản Cloudflare Workers/D1, Google Drive API key và `MASK_SECRET` ngẫu nhiên ổn định dài ít nhất 32 ký tự.
+Yêu cầu Node.js 22.13+, pnpm, tài khoản Cloudflare Workers/D1 và `MASK_SECRET` ngẫu nhiên ổn định dài ít nhất 32 ký tự. `GOOGLE_API_KEY` cần khi dùng nguồn Drive.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -187,6 +212,7 @@ Sau deploy, dùng một thư mục Drive thử để kiểm tra tạo thư việ
 |---|---|
 | Router Gateway và giao diện gốc | `src/index.ts` |
 | API quản lý, OPDS có tài khoản | `src/library.ts` |
+| Kiểm tra, mã hóa cấu hình và proxy nguồn OPDS | `src/opds-source.ts` |
 | Tham chiếu mã hóa, password hash, HMAC | `src/library-security.ts` |
 | D1, kiểm tra và ghép metadata | `src/library-data.ts` |
 | Feed thư viện mới | `src/library-feed.ts` |

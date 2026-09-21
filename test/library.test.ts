@@ -44,6 +44,13 @@ let driveCalls = 0;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init?: any) => {
   const url = new URL(typeof input === 'string' ? input : input.url || input.toString());
+  if (url.hostname === 'catalog.example') {
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get('authorization'), 'Basic '+btoa('shared:source-secret'), 'Upstream credential is only sent by the proxy');
+    if (url.pathname === '/book.epub') return new Response('fake-epub', {headers:{'Content-Type':'application/epub+zip','Content-Disposition':'attachment; filename="sample.epub"'}});
+    const title = url.pathname === '/sub' ? 'Kệ con' : 'Kho sách được chia sẻ';
+    return new Response(`<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:fake:${url.pathname}</id><title>${title}</title><link rel="subsection" href="/sub"/><entry><id>urn:fake:book</id><title>Sách mẫu</title><link rel="http://opds-spec.org/acquisition" href="/book.epub" type="application/epub+zip"/><link rel="http://opds-spec.org/image" href="https://images.example/cover.jpg"/></entry></feed>`, {headers:{'Content-Type':'application/atom+xml;charset=utf-8'}});
+  }
   assert.equal(url.hostname, 'www.googleapis.com', 'Only Google API metadata is fetched by the backend');
   assert.equal(init?.method || 'GET', 'GET', 'Drive remains read-only');
   assert.ok(!url.searchParams.has('alt'), 'No file content fetching');
@@ -145,6 +152,41 @@ test('metadata survives queries, appears in XML and JSON, can be reset; download
   assert.equal((await h.req(base(a)+'/books/'+b.key,'PUT',{ref:b.ref,coverUrl:'javascript:alert(1)'})).status,400);
   assert.equal((await h.req(base(a)+'/books/'+b.key,'DELETE',{ref:b.ref})).status,200);
   const reset=await(await h.req(base(a)+'/items')).json() as any;assert.equal(reset.items[0].title,files[0].name);assert.equal(reset.items[0].coverUrl,'https://images.example/source.jpg');
+});
+test('external OPDS sources aggregate behind short authenticated proxy links', async()=>{
+  const h=harness(),a=await h.create();
+  const added=await h.req(base(a)+'/sources','POST',{sources:[{url:'https://catalog.example/opds',username:'shared',password:'source-secret'}]});
+  assert.equal(added.status,201);const data=await added.json() as any;assert.equal(data.sources.length,1);
+  const source=data.sources[0];assert.match(source.shortId,/^[\w-]{12}$/);assert.equal(source.name,'Kho sách được chia sẻ');
+  assert.equal(source.host,'catalog.example');assert.equal(source.hasCredentials,true);assert.equal(source.url,'https://library.example/o/'+a.library.shortId+'/s/'+source.shortId);
+  assert.ok(!JSON.stringify(source).includes('source-secret'));assert.ok(!JSON.stringify(source).includes('/opds'));
+  const stored=h.db.sqlite.prepare('SELECT config_token FROM opds_sources').get()!.config_token as string;
+  assert.ok(!stored.includes('catalog.example'));assert.ok(!stored.includes('source-secret'));
+
+  const aggregate=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));assert.equal(aggregate.status,200);
+  const aggregateXml=await aggregate.text();assert.ok(aggregateXml.includes('Kho sách được chia sẻ'));assert.ok(aggregateXml.includes('/s/'+source.shortId));
+  assert.equal((await h.req(new URL(source.url).pathname)).status,401);
+  const proxy=await h.req(new URL(source.url).pathname,'GET',undefined,auth(a));assert.equal(proxy.status,200);
+  const xml=await proxy.text();assert.ok(!xml.includes('source-secret'));assert.ok(xml.includes('/s/'+source.shortId+'?target='));assert.ok(xml.includes('https://images.example/cover.jpg'));
+  const parserWindow=new JSDOM('').window;const parsed=new parserWindow.DOMParser().parseFromString(xml,'application/xml');
+  const acquisition=[...parsed.querySelectorAll('link')].find(link=>link.getAttribute('type')==='application/epub+zip')!;
+  const bookUrl=new URL(acquisition.getAttribute('href')!,'https://library.example');
+  const book=await h.req(bookUrl.pathname+bookUrl.search,'GET',undefined,auth(a));assert.equal(book.status,200);assert.equal(await book.text(),'fake-epub');
+  parserWindow.close();
+
+  let changed=await h.req(base(a)+'/sources/'+source.id,'PATCH',{enabled:false});assert.equal(changed.status,200);
+  assert.equal((await changed.json() as any).sources[0].enabled,false);
+  assert.ok(!(await (await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a))).text()).includes('Kho sách được chia sẻ'));
+  assert.equal((await h.req(new URL(source.url).pathname,'GET',undefined,auth(a))).status,404);
+  await h.req(base(a)+'/sources/'+source.id,'PATCH',{enabled:true});
+  changed=await h.req(base(a)+'/sources/'+source.id,'DELETE',{});assert.equal(changed.status,200);assert.deepEqual((await changed.json() as any).sources,[]);
+  assert.equal((await h.req(base(a)+'/sources','POST',{sources:[{url:'https://127.0.0.1/opds'}]})).status,400);
+});
+test('a library can use external OPDS without a Drive folder',async()=>{
+  const h=harness();const before=driveCalls;
+  const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kho OPDS',drive:'',username:'owner',password:'long-password-123'}));
+  assert.equal(driveCalls,before);const items=await(await h.req(base(a)+'/items')).json() as any;assert.deepEqual(items.items,[]);
+  const aggregate=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));assert.equal(aggregate.status,200);
 });
 test('same Drive file has isolated overrides and capabilities for each library', async()=>{
   const h=harness(),a=await h.create();const aItems=await(await h.req(base(a)+'/items')).json() as any;
@@ -249,7 +291,10 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     field('#create','drive',ROOT);field('#create','name','Thư viện UI');field('#create','username','owner');field('#create','password','ui-password-12345');submit('#create');
     await wait(()=>d.querySelectorAll('.book').length===3&&d.querySelector('#connection')!.hasAttribute('open'));
     assert.ok(d.querySelector('#secret-values')!.textContent!.includes('reader'));
-    click('[data-close="connection"]');click('#load-more');await wait(()=>d.querySelectorAll('.book').length===6);
+    click('[data-close="connection"]');click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));
+    field('#source-form','urls','https://catalog.example/opds');field('#source-form','username','shared');field('#source-form','password','source-secret');submit('#source-form');
+    await wait(()=>d.querySelectorAll('.source-row').length===1);assert.equal(d.querySelector('#source-count')!.textContent,'1');assert.ok(d.querySelector('#source-list')!.textContent!.includes('Kho sách được chia sẻ'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('source-secret'));
+    click('[data-close="sources"]');click('#load-more');await wait(()=>d.querySelectorAll('.book').length===6);
     click('#view-table');assert.equal(d.querySelectorAll('tbody tr').length,6);
     click('[data-open]');assert.ok(d.querySelector('#editor')!.hasAttribute('open'));
     field('#edit-form','title','Tên sửa UI');field('#edit-form','language','vi');field('#edit-form','coverUrl','https://images.example/ui.jpg');submit('#edit-form');

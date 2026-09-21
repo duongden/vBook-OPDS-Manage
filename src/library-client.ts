@@ -10,7 +10,8 @@ function applyTheme(theme,persist=false){document.documentElement.dataset.theme=
 let theme=savedTheme();applyTheme(theme);
 let library=null,csrf='',pageItems=new Map(),scanItems=new Map(),selected=new Set(),view='grid',scanMode=false;
 let trail=[],nextCursor=null,busy=false,editing=null,scanQueue=[],scanSeen=new Set(),scanRunning=false,scanComplete=false,scanPages=0,scanController=null;
-let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0;
+let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0,sources=[];
+const svgIcon=name=>name==='copy'?'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>':'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>';
 function notice(message,error=false){const el=$('#notice');el.textContent=message;el.classList.toggle('error',error);el.hidden=!message;}
 async function api(path,method='GET',body,signal){
  const headers={};if(method!=='GET'){headers['Content-Type']='application/json';if(csrf)headers['X-CSRF-Token']=csrf;}
@@ -26,16 +27,23 @@ function renderConnection(){
  (activeOpds?'<div class="secret">Tài khoản OPDS: <strong>reader</strong><br>Mật khẩu OPDS (lưu lại ngay)<code>'+escapeHtml(activeOpds.password)+'</code></div>':'')+
  (recoveryCode?'<div class="secret">Mã khôi phục — lưu riêng, không nhập vào vBook<code>'+escapeHtml(recoveryCode)+'</code></div>':'');
 }
+function renderSources(){
+ $('#source-count').textContent=String(sources.length);
+ $('#source-list').innerHTML=sources.length?sources.map(source=>'<article class="source-row"><div><h3>'+escapeHtml(source.name)+'</h3><p>'+escapeHtml(source.host)+(source.hasCredentials?' · Có xác thực':' · Công khai')+'</p><p class="muted">'+escapeHtml(source.url)+'</p></div><div class="source-actions"><label class="source-enabled"><input type="checkbox" data-source-toggle="'+escapeHtml(source.id)+'" '+(source.enabled?'checked':'')+'> Bật</label><button class="icon-button" data-source-copy="'+escapeHtml(source.id)+'" aria-label="Sao chép link '+escapeHtml(source.name)+'" title="Sao chép link">'+svgIcon('copy')+'</button><button class="icon-button danger" data-source-delete="'+escapeHtml(source.id)+'" aria-label="Xóa nguồn '+escapeHtml(source.name)+'" title="Xóa nguồn">'+svgIcon('trash')+'</button></div></article>').join(''):'<p class="muted">Chưa có nguồn OPDS.</p>';
+}
+async function loadSources(){
+ if(!library)return;sources=(await api(endpoint('/sources'))).sources;renderSources();
+}
 async function enter(data){
  library=data.library;csrf=data.csrf;pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
  $('#welcome').hidden=true;$('#dashboard').hidden=false;$('#logout').hidden=false;$('#account-button').hidden=false;$('#library-name').textContent=library.name;
  history.replaceState(null,'','/?library='+encodeURIComponent(library.id));
  $('#account-info').textContent='Mã thư viện: '+library.id+' · Tên đăng nhập: '+library.username;
  $('#scan-status').textContent='Chưa quét toàn thư viện. Số liệu hiện chỉ thuộc dữ liệu đã tải.';scanControls();
- notice('');await browse(false);if(data.opds||data.recoveryCode)showSecrets(data);
+ notice('');await Promise.all([browse(false),loadSources()]);if(data.opds||data.recoveryCode)showSecrets(data);
 }
 function leave(){
- pauseScan();requestEpoch++;library=null;csrf='';activeOpds=null;recoveryCode='';pageItems.clear();scanItems.clear();selected.clear();editing=null;scanQueue=[];scanSeen.clear();
+ pauseScan();requestEpoch++;library=null;csrf='';activeOpds=null;recoveryCode='';sources=[];pageItems.clear();scanItems.clear();selected.clear();editing=null;scanQueue=[];scanSeen.clear();
  document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('#secret-values').replaceChildren();$('#items').replaceChildren();$('#edit-form').reset();
  $('#welcome').hidden=false;$('#dashboard').hidden=true;$('#logout').hidden=true;$('#account-button').hidden=true;tab('login');
 }
@@ -126,11 +134,22 @@ document.addEventListener('change',event=>{if(event.target.dataset.select){const
 $('#logout').addEventListener('click',async()=>{try{await api('/api/session','DELETE',{});leave();notice('Đã đăng xuất.');}catch(e){notice(e.message,true);}});
 $('#theme-toggle').addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';applyTheme(theme,true);});
 $('#account-button').addEventListener('click',()=>$('#account').showModal());
+$('#sources-button').addEventListener('click',()=>{renderSources();$('#sources').showModal();});
 $('#opds-button').addEventListener('click',()=>{renderConnection();$('#connection').showModal();});
 $('#copy-opds').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('#opds-url').value);$('#copy-opds').textContent='Đã sao chép';}catch{$('#opds-url').select();$('#copy-opds').textContent='Hãy sao chép link đã chọn';}});
 $('#rotate-opds').addEventListener('click',async()=>{if(!confirm('Mật khẩu OPDS cũ sẽ hết hiệu lực. Bạn sẽ cần cập nhật lại trong vBook.'))return;$('#rotate-opds').disabled=true;try{const data=await api(endpoint('/opds-credentials'),'POST',{});activeOpds=data.opds;renderConnection();}catch(e){notice(e.message,true);}finally{$('#rotate-opds').disabled=false;}});
 $('#password-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{const data=await api(endpoint('/password'),'POST',Object.fromEntries(new FormData(f)));csrf=data.csrf;f.reset();$('#account').close();notice('Đã đổi mật khẩu và kết thúc các phiên cũ.');});});
 $('#delete-form').addEventListener('submit',event=>{event.preventDefault();if(!confirm('Xóa vĩnh viễn tài khoản thư viện và metadata chỉnh sửa? File Drive không bị ảnh hưởng.'))return;const f=event.currentTarget;submitForm(f,async()=>{await api(endpoint('/delete'),'POST',Object.fromEntries(new FormData(f)));f.reset();leave();notice('Đã xóa dữ liệu quản lý thư viện.');});});
+$('#source-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{
+ const values=Object.fromEntries(new FormData(f));const urls=[...new Set(String(values.urls||'').split(/\r?\n/).map(value=>value.trim()).filter(Boolean))];
+ if(!urls.length||urls.length>10)throw new Error('Mỗi lần nhập từ 1 đến 10 URL, mỗi URL trên một dòng.');
+ const data=await api(endpoint('/sources'),'POST',{sources:urls.map(url=>({url,username:values.username||'',password:values.password||''}))});sources=data.sources;f.reset();renderSources();notice('Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.');
+ });});
+$('#source-list').addEventListener('click',async event=>{
+ const copy=event.target.closest('[data-source-copy]');if(copy){const source=sources.find(item=>item.id===copy.dataset.sourceCopy);if(!source)return;try{await navigator.clipboard.writeText(source.url);notice('Đã sao chép link nguồn OPDS.');}catch{notice('Không thể sao chép tự động.',true);}return;}
+ const remove=event.target.closest('[data-source-delete]');if(remove){const source=sources.find(item=>item.id===remove.dataset.sourceDelete);if(!source||!confirm('Xóa nguồn OPDS “'+source.name+'”?'))return;const data=await api(endpoint('/sources/'+source.id),'DELETE');sources=data.sources;renderSources();notice('Đã xóa nguồn OPDS.');}
+});
+$('#source-list').addEventListener('change',async event=>{const input=event.target.closest('[data-source-toggle]');if(!input)return;try{const data=await api(endpoint('/sources/'+input.dataset.sourceToggle),'PATCH',{enabled:input.checked});sources=data.sources;renderSources();}catch(e){input.checked=!input.checked;notice(e.message,true);}});
 $('#search').addEventListener('input',render);['language','format','sort'].forEach(id=>$('#'+id).addEventListener('change',render));
 ['grid','table'].forEach(mode=>$('#view-'+mode).addEventListener('click',()=>{view=mode;['grid','table'].forEach(m=>$('#view-'+m).setAttribute('aria-pressed',String(m===mode)));render();}));
 $('#load-more').addEventListener('click',()=>{if(!busy)browse(true);});$('#reload-folder').addEventListener('click',()=>{pauseScan();trail=[];browse(false);});

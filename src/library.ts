@@ -5,8 +5,9 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { extractFolderId, fetchDriveFolder, searchDriveFolder } from './drive';
 import { maskFolderId, unmaskFolderId } from './crypto';
 import { Library, getLibrary, presentItems, saveOverride, validateOverrides } from './library-data';
-import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomToken, seal, stringInput, unseal } from './library-security';
+import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomToken, revealData, seal, stringInput, unseal } from './library-security';
 import { managedFeed, XML_TYPE } from './library-feed';
+import { fetchOpds, OpdsSourceConfig, OpdsSourceRow, rewriteOpdsBody, safeOpdsUrl, sourceConfig, sourceToken, validateOpds } from './opds-source';
 
 export interface LibraryEnv { DB: D1Database; MASK_SECRET: string; GOOGLE_API_KEY: string }
 interface Session { library_id: string; csrf: string; expires_at: number }
@@ -92,23 +93,25 @@ api.post('/api/libraries', async c => {
   const name = stringInput(body.name, 120, 'Tên thư viện', true);
   const username = stringInput(body.username, 80, 'Tên đăng nhập', true);
   const password = passwordInput(body.password);
-  const input = stringInput(body.drive, 2048, 'Link Drive', true);
-  if (input.includes('://')) {
+  const input = stringInput(body.drive ?? '', 2048, 'Link Drive');
+  if (input && input.includes('://')) {
     let host = ''; try { host = new URL(input).hostname; } catch {}
     if (host !== 'drive.google.com') fail(400, 'Vui lòng nhập link drive.google.com hoặc Folder ID.');
   }
-  const folder = extractFolderId(input);
-  if (!folder || !/^[\w-]{10,60}$/.test(folder)) return fail(400, 'Link thư mục Drive không hợp lệ.');
-  // Confirm the supplied resource really is a readable folder (including empty ones).
-  const url = new URL(`https://www.googleapis.com/drive/v3/files/${folder}`);
-  url.searchParams.set('key', googleKey(c)); url.searchParams.set('fields', 'id,mimeType'); url.searchParams.set('supportsAllDrives', 'true');
-  const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
-  if (!res.ok) fail(400, 'Không đọc được thư mục. Kiểm tra chia sẻ “Bất kỳ ai có đường liên kết”.');
-  const meta = await res.json() as { mimeType?: string };
-  if (meta.mimeType !== 'application/vnd.google-apps.folder') fail(400, 'Link phải trỏ tới thư mục Drive.');
+  const folder = input ? extractFolderId(input) : '';
+  if (input && (!folder || !/^[\w-]{10,60}$/.test(folder))) return fail(400, 'Link thư mục Drive không hợp lệ.');
+  if (folder) {
+    // Confirm the supplied resource really is a readable folder (including empty ones).
+    const url = new URL(`https://www.googleapis.com/drive/v3/files/${folder}`);
+    url.searchParams.set('key', googleKey(c)); url.searchParams.set('fields', 'id,mimeType'); url.searchParams.set('supportsAllDrives', 'true');
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+    if (!res.ok) fail(400, 'Không đọc được thư mục. Kiểm tra chia sẻ “Bất kỳ ai có đường liên kết”.');
+    const meta = await res.json() as { mimeType?: string };
+    if (meta.mimeType !== 'application/vnd.google-apps.folder') fail(400, 'Link phải trỏ tới thư mục Drive.');
+  }
   const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomToken(), opds = randomToken();
   await c.env.DB.prepare('INSERT INTO libraries (id, short_id, name, root_token, username, password_hash, recovery_hash, opds_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(id, shortId, name, await maskFolderId(folder, c.env.MASK_SECRET), username, await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(recovery), await digest(`reader:${opds}`), Date.now()).run();
+    .bind(id, shortId, name, folder ? await maskFolderId(folder, c.env.MASK_SECRET) : '', username, await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(recovery), await digest(`reader:${opds}`), Date.now()).run();
   const csrf = await startSession(c, id, 0);
   const library = { id, short_id: shortId };
   return c.json({ library: { id, shortId, name, username }, csrf, recoveryCode: recovery, opds: credentials(c, library, opds) }, 201);
@@ -183,6 +186,7 @@ api.post('/api/libraries/:id/delete', async c => {
 
 async function readPage(c: C, lib: Library, params: {folder?: string; cursor?: string; q?: string}) {
   const secret = c.env.MASK_SECRET;
+  if (!lib.root_token) return { items: [], folderKey: await bookKey(secret, lib.id, 'external-opds-only'), nextCursor: null };
   const root = await unmaskFolderId(lib.root_token, secret);
   if (!root) return fail(503, 'Không giải mã được nguồn Drive. Kiểm tra MASK_SECRET.');
   let folder = root, page: string | undefined;
@@ -239,6 +243,62 @@ api.post('/api/libraries/:id/language', async c => {
   return c.json({ language: language || '', count: keys.length });
 });
 
+async function listSources(c: C) {
+  const lib = c.get('library');
+  const rows = (await c.env.DB.prepare('SELECT * FROM opds_sources WHERE library_id = ? ORDER BY created_at, name').bind(lib.id).all<OpdsSourceRow>()).results;
+  return Promise.all(rows.map(async row => {
+    const config = await sourceConfig(c.env.MASK_SECRET, row);
+    return {
+      id: row.id, shortId: row.short_id, name: row.name, host: safeOpdsUrl(config.url).host,
+      enabled: Boolean(row.enabled), hasCredentials: Boolean(config.username || config.password),
+      url: `${new URL(c.req.url).origin}/o/${lib.short_id}/s/${row.short_id}`,
+    };
+  }));
+}
+
+api.get('/api/libraries/:id/sources', async c => c.json({ sources: await listSources(c) }));
+api.post('/api/libraries/:id/sources', async c => {
+  const body = await jsonBody(c), lib = c.get('library');
+  if (!Array.isArray(body.sources) || !body.sources.length || body.sources.length > 10) fail(400, 'Mỗi lần thêm từ 1 đến 10 nguồn OPDS.');
+  const prepared: { id: string; shortId: string; name: string; token: string }[] = [];
+  for (const raw of body.sources as unknown[]) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(400, 'Danh sách nguồn OPDS không hợp lệ.');
+    const item = raw as Record<string, unknown>;
+    const enteredUrl = stringInput(item.url, 2048, 'URL OPDS', true);
+    const username = stringInput(item.username ?? '', 256, 'Tên đăng nhập nguồn');
+    const password = stringInput(item.password ?? '', 512, 'Mật khẩu nguồn');
+    const config: OpdsSourceConfig = { url: safeOpdsUrl(enteredUrl).href, username, password };
+    let checked: Awaited<ReturnType<typeof validateOpds>>;
+    try { checked = await validateOpds(config); }
+    catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return fail(503, 'Không kết nối được nguồn OPDS. Hãy kiểm tra URL và thử lại.');
+    }
+    config.url = safeOpdsUrl(checked.url || config.url).href;
+    const id = crypto.randomUUID(), shortId = newShortId();
+    const name = stringInput(item.name ?? '', 120, 'Tên nguồn') || checked.title || safeOpdsUrl(config.url).hostname;
+    prepared.push({ id, shortId, name, token: await sourceToken(c.env.MASK_SECRET, lib.id, id, config) });
+  }
+  const now = Date.now();
+  await c.env.DB.batch(prepared.map(source => c.env.DB.prepare('INSERT INTO opds_sources (id, library_id, short_id, name, config_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
+    .bind(source.id, lib.id, source.shortId, source.name, source.token, now, now)));
+  return c.json({ sources: await listSources(c) }, 201);
+});
+api.patch('/api/libraries/:id/sources/:sourceId', async c => {
+  const body = await jsonBody(c), lib = c.get('library');
+  if (typeof body.enabled !== 'boolean') fail(400, 'Trạng thái nguồn không hợp lệ.');
+  const result = await c.env.DB.prepare('UPDATE opds_sources SET enabled = ?, updated_at = ? WHERE id = ? AND library_id = ?')
+    .bind(body.enabled ? 1 : 0, Date.now(), c.req.param('sourceId'), lib.id).run();
+  if (result.meta.changes !== 1) fail(404, 'Không tìm thấy nguồn OPDS.');
+  return c.json({ sources: await listSources(c) });
+});
+api.delete('/api/libraries/:id/sources/:sourceId', async c => {
+  const lib = c.get('library');
+  const result = await c.env.DB.prepare('DELETE FROM opds_sources WHERE id = ? AND library_id = ?').bind(c.req.param('sourceId'), lib.id).run();
+  if (result.meta.changes !== 1) fail(404, 'Không tìm thấy nguồn OPDS.');
+  return c.json({ sources: await listSources(c) });
+});
+
 async function requireOpds(c: C, next: () => Promise<void>, field: 'id' | 'short_id', value: string) {
   const lib = await c.env.DB.prepare(`SELECT * FROM libraries WHERE ${field} = ?`).bind(value).first<Library>();
   let supplied = '';
@@ -269,7 +329,11 @@ async function serveOpds(c: C, feedPath: string, downloadPath: string) {
   const searchTemplate = search.href + (search.search ? '&' : '?') + 'q={searchTerms}';
   const next = new URL(self); if (data.nextCursor) next.searchParams.set('cursor', data.nextCursor);
   const json = (c.req.header('Accept') || '').includes('application/opds+json');
-  return c.body(managedFeed({ libraryId: lib.id, title: q ? `Tìm kiếm: ${q}` : lib.name, feedUrl: start, downloadUrl: `${url.origin}${downloadPath}`, self: self.href, start, search: searchTemplate, next: data.nextCursor ? next.href : undefined, ...data }, json), 200,
+  const sourceRows = !q && !c.req.query('folder') && !c.req.query('cursor')
+    ? (await c.env.DB.prepare('SELECT id, short_id, name FROM opds_sources WHERE library_id = ? AND enabled = 1 ORDER BY created_at, name').bind(lib.id).all<{id:string;short_id:string;name:string}>()).results
+    : [];
+  const sources = sourceRows.map(source => ({ id: source.id, title: source.name, href: `${url.origin}/o/${lib.short_id}/s/${source.short_id}` }));
+  return c.body(managedFeed({ libraryId: lib.id, title: q ? `Tìm kiếm: ${q}` : lib.name, feedUrl: start, downloadUrl: `${url.origin}${downloadPath}`, self: self.href, start, search: searchTemplate, next: data.nextCursor ? next.href : undefined, sources, ...data }, json), 200,
     { 'Content-Type': `${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`, Vary: 'Accept, Authorization' });
 }
 async function downloadBook(c: C) {
@@ -281,3 +345,38 @@ api.get('/library/:id/opds', c => serveOpds(c, `/library/${c.get('library').id}/
 api.get('/library/:id/download', downloadBook);
 api.get('/o/:shortId', c => serveOpds(c, `/o/${c.get('library').short_id}`, `/o/${c.get('library').short_id}/d`));
 api.get('/o/:shortId/d', downloadBook);
+api.get('/o/:shortId/s/:sourceShortId', async c => {
+  const lib = c.get('library');
+  const found = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE library_id = ? AND short_id = ? AND enabled = 1').bind(lib.id, c.req.param('sourceShortId')).first<OpdsSourceRow>();
+  if (!found) return fail(404, 'Không tìm thấy nguồn OPDS hoặc nguồn đang tắt.');
+  const row = found;
+  const config = await sourceConfig(c.env.MASK_SECRET, row);
+  let target = safeOpdsUrl(config.url);
+  const targetToken = c.req.query('target');
+  if (targetToken) {
+    const value = await revealData<{url:string}>(c.env.MASK_SECRET, `opds-target:${row.library_id}:${row.id}`, targetToken);
+    target = safeOpdsUrl(String(value.url || ''));
+  }
+  if (target.origin !== safeOpdsUrl(config.url).origin) fail(403, 'Tài nguyên không thuộc nguồn OPDS này.');
+  let upstream: Response;
+  try { upstream = await fetchOpds(config, target); }
+  catch { return fail(503, 'Không kết nối được nguồn OPDS.'); }
+  const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+  const isFeed = !targetToken || /(?:atom|opds|xml|json)/i.test(contentType);
+  if (isFeed) {
+    const length = Number(upstream.headers.get('content-length') || 0);
+    if (length > 2_000_000) fail(413, 'Feed OPDS lớn hơn 2 MB.');
+    const bytes = await upstream.arrayBuffer();
+    if (bytes.byteLength > 2_000_000) fail(413, 'Feed OPDS lớn hơn 2 MB.');
+    const body = new TextDecoder().decode(bytes);
+    let rewritten = body;
+    if (upstream.ok) {
+      try { rewritten = await rewriteOpdsBody(c.env.MASK_SECRET, lib.short_id, row, new URL(upstream.url || target.href), body, contentType); }
+      catch { fail(503, 'Không đọc được dữ liệu từ nguồn OPDS.'); }
+    }
+    return new Response(rewritten, { status: upstream.status, headers: { 'Content-Type': contentType, 'Cache-Control': 'private, no-store', Vary: 'Authorization' } });
+  }
+  const headers = new Headers({ 'Content-Type': contentType, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+  for (const name of ['content-disposition','content-length','etag','last-modified','location']) { const value = upstream.headers.get(name); if (value) headers.set(name, value); }
+  return new Response(upstream.body, { status: upstream.status, headers });
+});

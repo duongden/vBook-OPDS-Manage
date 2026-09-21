@@ -5,6 +5,7 @@ export const XML_TYPE = 'application/atom+xml;profile=opds-catalog';
 export interface ManagedFeed {
   libraryId: string; title: string; feedUrl: string; downloadUrl: string; self: string; start: string;
   search: string; next?: string; folderKey: string; items: LibraryItem[];
+  sources?: { id: string; title: string; href: string }[];
 }
 export function managedFeed(f: ManagedFeed, json: boolean): string {
   const type = json ? 'application/opds+json' : XML_TYPE;
@@ -19,7 +20,10 @@ export function managedFeed(f: ManagedFeed, json: boolean): string {
   const now = new Date().toISOString();
   if (json) return JSON.stringify({
     metadata: { identifier, title: f.title, modified: now }, links,
-    navigation: f.items.filter(i => i.isFolder).map(i => ({ href: folderUrl(i), title: i.title, type, rel: ['subsection'] })),
+    navigation: [
+      ...(f.sources || []).map(source => ({ href: source.href, title: source.title, type: XML_TYPE, rel: ['subsection'] })),
+      ...f.items.filter(i => i.isFolder).map(i => ({ href: folderUrl(i), title: i.title, type, rel: ['subsection'] })),
+    ],
     publications: f.items.filter(i => !i.isFolder).map(i => ({
       metadata: {
         identifier: `urn:vbook:book:${f.libraryId}:${i.key}`, title: i.opdsTitle, modified: i.modified,
@@ -32,6 +36,7 @@ export function managedFeed(f: ManagedFeed, json: boolean): string {
       ...(i.coverUrl ? { images: [{ href: i.coverUrl }] } : {}),
     })),
   });
+  const sourceEntries = (f.sources || []).map(source => `<entry><id>urn:vbook:opds-source:${e(f.libraryId)}:${e(source.id)}</id><title>${e(source.title)}</title><updated>${now}</updated><summary>Nguồn OPDS được liên kết</summary><link rel="subsection" href="${e(source.href)}" type="${XML_TYPE}"/></entry>`).join('\n');
   const entries = f.items.map(i => {
     const title = i.isFolder ? i.title : i.opdsTitle;
     const head = `<entry><id>urn:vbook:${i.isFolder ? 'folder' : 'book'}:${e(f.libraryId)}:${e(i.key)}</id><title>${e(title)}</title><updated>${e(i.modified)}</updated>`;
@@ -44,5 +49,5 @@ export function managedFeed(f: ManagedFeed, json: boolean): string {
       (i.coverUrl ? `<link rel="http://opds-spec.org/image" href="${e(i.coverUrl)}"/><link rel="http://opds-spec.org/image/thumbnail" href="${e(i.coverUrl)}"/>` : '') +
       `<link rel="http://opds-spec.org/acquisition" href="${e(download(i))}" type="${e(i.mimeType)}"${i.size ? ` length="${e(i.size)}"` : ''}/></entry>`;
   }).join('\n');
-  return `<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/"><id>${e(identifier)}</id><title>${e(f.title)}</title><updated>${now}</updated><author><name>VBook Library</name></author>${links.map(l => `<link rel="${l.rel[0]}" href="${e(l.href)}" type="${type}"/>`).join('')}${entries}</feed>`;
+  return `<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/"><id>${e(identifier)}</id><title>${e(f.title)}</title><updated>${now}</updated><author><name>VBook Library</name></author>${links.map(l => `<link rel="${l.rel[0]}" href="${e(l.href)}" type="${type}"/>`).join('')}${sourceEntries}${entries}</feed>`;
 }
