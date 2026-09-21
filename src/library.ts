@@ -86,6 +86,23 @@ function credentials(c: C, library: Pick<Library, 'id' | 'short_id'>, password: 
   return { url: `${new URL(c.req.url).origin}${path}`, username: 'reader', password };
 }
 const newShortId = () => base64url(crypto.getRandomValues(new Uint8Array(9)));
+type PreparedSource = { id: string; shortId: string; name: string; token: string };
+async function prepareSource(secret: string, libraryId: string, raw: Record<string, unknown>): Promise<PreparedSource> {
+  const enteredUrl = stringInput(raw.url, 2048, 'URL OPDS', true);
+  const username = stringInput(raw.username ?? '', 256, 'Tên đăng nhập nguồn');
+  const password = stringInput(raw.password ?? '', 512, 'Mật khẩu nguồn');
+  const config: OpdsSourceConfig = { url: safeOpdsUrl(enteredUrl).href, username, password };
+  let checked: Awaited<ReturnType<typeof validateOpds>>;
+  try { checked = await validateOpds(config); }
+  catch (error) {
+    if (error instanceof HTTPException) throw error;
+    return fail(503, 'Không kết nối được nguồn OPDS. Hãy kiểm tra URL và thử lại.');
+  }
+  config.url = safeOpdsUrl(checked.url || config.url).href;
+  const id = crypto.randomUUID(), shortId = newShortId();
+  const name = stringInput(raw.name ?? '', 120, 'Tên nguồn') || checked.title || safeOpdsUrl(config.url).hostname;
+  return { id, shortId, name, token: await sourceToken(secret, libraryId, id, config) };
+}
 
 api.post('/api/libraries', async c => {
   await rateLimit(c, 'create', 5);
@@ -94,12 +111,13 @@ api.post('/api/libraries', async c => {
   const username = stringInput(body.username, 80, 'Tên đăng nhập', true);
   const password = passwordInput(body.password);
   const input = stringInput(body.drive ?? '', 2048, 'Link Drive');
-  if (input && input.includes('://')) {
-    let host = ''; try { host = new URL(input).hostname; } catch {}
-    if (host !== 'drive.google.com') fail(400, 'Vui lòng nhập link drive.google.com hoặc Folder ID.');
-  }
-  const folder = input ? extractFolderId(input) : '';
-  if (input && (!folder || !/^[\w-]{10,60}$/.test(folder))) return fail(400, 'Link thư mục Drive không hợp lệ.');
+  let folder = '', initialOpds: Record<string, unknown> | null = null;
+  if (input?.includes('://')) {
+    let parsed: URL; try { parsed = new URL(input); } catch { return fail(400, 'Link Drive hoặc OPDS không hợp lệ.'); }
+    if (parsed.hostname === 'drive.google.com') folder = extractFolderId(input) || '';
+    else initialOpds = { url: input };
+  } else if (input) folder = extractFolderId(input) || '';
+  if (input && !initialOpds && (!folder || !/^[\w-]{10,60}$/.test(folder))) return fail(400, 'Link thư mục Drive không hợp lệ.');
   if (folder) {
     // Confirm the supplied resource really is a readable folder (including empty ones).
     const url = new URL(`https://www.googleapis.com/drive/v3/files/${folder}`);
@@ -110,8 +128,13 @@ api.post('/api/libraries', async c => {
     if (meta.mimeType !== 'application/vnd.google-apps.folder') fail(400, 'Link phải trỏ tới thư mục Drive.');
   }
   const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomToken(), opds = randomToken();
-  await c.env.DB.prepare('INSERT INTO libraries (id, short_id, name, root_token, username, password_hash, recovery_hash, opds_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(id, shortId, name, folder ? await maskFolderId(folder, c.env.MASK_SECRET) : '', username, await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(recovery), await digest(`reader:${opds}`), Date.now()).run();
+  const source = initialOpds ? await prepareSource(c.env.MASK_SECRET, id, initialOpds) : null;
+  const now = Date.now();
+  const statements = [c.env.DB.prepare('INSERT INTO libraries (id, short_id, name, root_token, username, password_hash, recovery_hash, opds_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, shortId, name, folder ? await maskFolderId(folder, c.env.MASK_SECRET) : '', username, await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(recovery), await digest(`reader:${opds}`), now)];
+  if (source) statements.push(c.env.DB.prepare('INSERT INTO opds_sources (id, library_id, short_id, name, config_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
+    .bind(source.id, id, source.shortId, source.name, source.token, now, now));
+  await c.env.DB.batch(statements);
   const csrf = await startSession(c, id, 0);
   const library = { id, short_id: shortId };
   return c.json({ library: { id, shortId, name, username }, csrf, recoveryCode: recovery, opds: credentials(c, library, opds) }, 201);
@@ -260,24 +283,10 @@ api.get('/api/libraries/:id/sources', async c => c.json({ sources: await listSou
 api.post('/api/libraries/:id/sources', async c => {
   const body = await jsonBody(c), lib = c.get('library');
   if (!Array.isArray(body.sources) || !body.sources.length || body.sources.length > 10) fail(400, 'Mỗi lần thêm từ 1 đến 10 nguồn OPDS.');
-  const prepared: { id: string; shortId: string; name: string; token: string }[] = [];
+  const prepared: PreparedSource[] = [];
   for (const raw of body.sources as unknown[]) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(400, 'Danh sách nguồn OPDS không hợp lệ.');
-    const item = raw as Record<string, unknown>;
-    const enteredUrl = stringInput(item.url, 2048, 'URL OPDS', true);
-    const username = stringInput(item.username ?? '', 256, 'Tên đăng nhập nguồn');
-    const password = stringInput(item.password ?? '', 512, 'Mật khẩu nguồn');
-    const config: OpdsSourceConfig = { url: safeOpdsUrl(enteredUrl).href, username, password };
-    let checked: Awaited<ReturnType<typeof validateOpds>>;
-    try { checked = await validateOpds(config); }
-    catch (error) {
-      if (error instanceof HTTPException) throw error;
-      return fail(503, 'Không kết nối được nguồn OPDS. Hãy kiểm tra URL và thử lại.');
-    }
-    config.url = safeOpdsUrl(checked.url || config.url).href;
-    const id = crypto.randomUUID(), shortId = newShortId();
-    const name = stringInput(item.name ?? '', 120, 'Tên nguồn') || checked.title || safeOpdsUrl(config.url).hostname;
-    prepared.push({ id, shortId, name, token: await sourceToken(c.env.MASK_SECRET, lib.id, id, config) });
+    prepared.push(await prepareSource(c.env.MASK_SECRET, lib.id, raw as Record<string, unknown>));
   }
   const now = Date.now();
   await c.env.DB.batch(prepared.map(source => c.env.DB.prepare('INSERT INTO opds_sources (id, library_id, short_id, name, config_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
