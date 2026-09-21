@@ -15,8 +15,7 @@
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "bundle": "wrangler deploy --dry-run --outdir dist",
     "test:runtime": "node test/runtime.test.mjs",
-    "precommit": "pnpm run build && pnpm run test",
-    "test:reference": "python3 reading-room/scripts/build.py && node --test reading-room/test/*.test.mjs"
+    "precommit": "pnpm run build && pnpm run test"
   },
   "keywords": [
     "opds",

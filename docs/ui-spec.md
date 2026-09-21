@@ -2,7 +2,7 @@
 
 ## Cập nhật v1.5.0
 
-Trang `/` là quản lý theo Reading Room: nền giấy `#f8f7f3`, chữ `#283c32`, điểm nhấn `#314f40`, serif cho tiêu đề, font hệ thống cho nội dung. Có tạo/đăng nhập/khôi phục; kệ và bảng; thống kê theo phạm vi; quét/tạm dừng/thử lại; chỉnh sửa; gán ngôn ngữ hàng loạt; kết nối vBook và tài khoản.
+Trang `/` là giao diện quản lý: nền giấy `#f8f7f3`, chữ `#283c32`, điểm nhấn `#314f40`, serif cho tiêu đề, font hệ thống cho nội dung. Có tạo/đăng nhập/khôi phục; kệ và bảng; thống kê theo phạm vi; quét/tạm dừng/thử lại; chỉnh sửa; gán ngôn ngữ hàng loạt; kết nối vBook và tài khoản.
 
 Không có sách mẫu hoặc trình đọc online. HTML/CSS/JS phục vụ từ Worker, không cần framework frontend. Script bên ngoài và CSP chặn inline script; dữ liệu người dùng được escape khi render. Metadata/quyền do server quyết định; bộ nhớ trang chỉ giữ kết quả Drive tạm thời.
 

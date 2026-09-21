@@ -1,6 +1,6 @@
 # Security review — 2026-09-19
 
-Scope: all application source under `src/`, D1 migrations, client rendering, legacy routes, the `reading-room/` reference application, dependency lockfile, configuration, release files and Git secret exclusion. This is a source review with regression and local runtime tests, not an independent penetration-test certification.
+Scope: all application source under `src/`, D1 migrations, client rendering, legacy routes, dependency lockfile, configuration, release files and Git secret exclusion. This is a source review with regression and local runtime tests, not an independent penetration-test certification.
 
 ## Findings and changes
 
@@ -13,7 +13,6 @@ Scope: all application source under `src/`, D1 migrations, client rendering, leg
 | Low | Session cookie could share a name with cookies set by sibling subdomains. | Switched to `__Host-vbook_session`, with Secure, HttpOnly, SameSite=Strict and Path=/. Existing browser sessions must sign in again. |
 | Low | Recursive Drive cache was unbounded and keyed only by the root folder. | Cache now includes a digest of the API key and traversal parameters, removes expired entries and caps memory entries at 256. Recursive requests have a timeout. |
 | Low | Legacy Drive parsing accepted folder-shaped input from unrelated hosts; provider exceptions could reach logs. | Require HTTPS `drive.google.com` or a bounded raw ID; reject embedded credentials. Legacy provider errors are logged without raw exception details. |
-| Low | Loopback Reading Room preview trusted arbitrary Host headers while bypassing login. | Preview accepts only loopback hostnames and rejects foreign Host values; production Basic mode remains separate. |
 
 Also changed rate-limit identifiers to keyed HMACs instead of unkeyed IP hashes. Git exclusions cover local secrets, production infrastructure identifiers, databases and generated builds. CI actions are pinned to commit hashes and receive read-only repository permissions.
 
@@ -24,7 +23,6 @@ Also changed rate-limit identifiers to keyed HMACs instead of unkeyed IP hashes.
 - 14 managed tests: SQL migrations against SQLite, tenant isolation, CSRF/Origin, malicious metadata/cover schemes, expired/tampered capabilities, body limits, auth rate limits, password/recovery/session invalidation, OPDS credential rotation, UI interactions and Drive error handling.
 - Regression tests explicitly reproduce caller-selected auth rejection, partial server configuration, stale retained sessions, password verification racing revocation, pepper validation and legacy hash upgrade.
 - Bundled Worker on local Miniflare/D1: migrations, Web Crypto, cookies, metadata update and authenticated OPDS. The test uses the new Miniflare compatibility adapter and blocks real upstream requests through a controlled outbound handler.
-- Reading Room reference tests, including loopback Host protection.
 - Full dependency audit; staged-file scan for credential patterns and accidental inclusion of values from local `.dev.vars`/`.env`, without printing those values.
 
 ## Remaining limits

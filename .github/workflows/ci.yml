@@ -25,4 +25,3 @@ jobs:
       - run: pnpm test
       - run: pnpm run bundle
       - run: pnpm run test:runtime
-      - run: pnpm run test:reference

@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "vbook-library"
 # Local placeholder. Keep the production ID in the ignored
-# wrangler.production.toml file described in docs/deployment.md.
+# wrangler.production.toml file described in README.md.
 database_id = "00000000-0000-0000-0000-000000000001"
 migrations_dir = "migrations"
 

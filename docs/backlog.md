@@ -4,7 +4,7 @@
 
 ## v1.5.0 — Quản lý thư viện (2026-09-19)
 
-Đã tích hợp D1, tài khoản quản lý/OPDS riêng, metadata và URL bìa, kệ/bảng Reading Room, quét toàn kho trong phiên trang.
+Đã tích hợp D1, tài khoản quản lý/OPDS riêng, metadata và URL bìa, giao diện kệ/bảng, quét toàn kho trong phiên trang.
 
 Các milestone bên dưới là lịch sử Gateway. Quyết định dùng D1 được người dùng chấp thuận, thay thế giả định cũ hoàn toàn stateless/$0 database.
 

@@ -1,8 +1,6 @@
 # VBook Library / OPDS Gateway — v1.5.1
 
-Giao diện quản lý thư viện Google Drive, xây trên Gateway v1.4.1 và bố cục Reading Room. Web dùng để kiểm tra sách và chỉnh sửa thông tin; vBook dùng để tải và đọc qua OPDS 1.2 hoặc 2.0.
-
-> **Bạn chỉ muốn tạo kho sách và thêm vào vBook?** Xem [Hướng dẫn sử dụng dành cho người dùng thông thường](HUONG-DAN-SU-DUNG.md). Hướng dẫn có hình giao diện thật và chỉ sử dụng dữ liệu giả để minh họa.
+Giao diện quản lý thư viện Google Drive dành cho vBook. Web dùng để kiểm tra sách và chỉnh sửa thông tin; vBook dùng để tải và đọc qua OPDS 1.2 hoặc 2.0.
 
 **Không lưu nội dung sách, không ghi vào Drive.** D1 chỉ lưu tài khoản, cấu hình thư viện, phiên đăng nhập và metadata chỉnh sửa. Nguồn Drive cần được chia sẻ “Bất kỳ ai có đường liên kết”; mật khẩu Gateway không thay đổi quyền truy cập file trên Google.
 
@@ -40,7 +38,6 @@ pnpm run build
 pnpm test
 pnpm run bundle
 pnpm run test:runtime
-pnpm run test:reference
 pnpm audit
 ```
 
@@ -51,18 +48,92 @@ pnpm audit
 
 Các test không dùng tài khoản/file thật và không thay cho kiểm tra cuối trên app vBook, Drive thật hoặc kiểm tra bố cục trình duyệt.
 
-## Cách dùng
+## Hướng dẫn sử dụng
 
-Tóm tắt nhanh:
+Người dùng thông thường chỉ cần ứng dụng **vBook**, một thư mục Google Drive chứa sách và địa chỉ VBook Library do người quản trị cung cấp. Không cần cài máy chủ hoặc tự tạo API key.
 
-1. Chia sẻ thư mục Drive ở chế độ **Bất kỳ ai có đường liên kết** và quyền **Người xem**.
-2. Dán link vào trang chủ, đặt tên thư viện và tài khoản quản lý.
-3. Lưu **mã thư viện**, **mã khôi phục** và **mật khẩu OPDS** được cấp.
-4. Bấm **Kết nối vBook**, sao chép URL và thêm vào **Extension Cloud → OPDS** với username `reader`.
+> Tất cả tên, đường dẫn, mã thư viện và mật khẩu trong phần hướng dẫn và hình minh họa dưới đây đều là dữ liệu giả.
 
-Xem hướng dẫn từng bước, cách quản lý sách, khôi phục tài khoản và xử lý lỗi tại [HUONG-DAN-SU-DUNG.md](HUONG-DAN-SU-DUNG.md).
+### 1. Chuẩn bị Google Drive
 
-Feed tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi sửa, làm mới catalog trong vBook vì ứng dụng có thể giữ cache riêng.
+1. Tạo một thư mục và đưa các file EPUB, PDF, CBZ, CBR, MOBI hoặc TXT vào đó. Có thể dùng thư mục con để phân loại.
+2. Chọn **Chia sẻ** → **Bất kỳ ai có đường liên kết** → quyền **Người xem**.
+3. Sao chép liên kết thư mục.
+
+Ví dụ giả:
+
+```text
+https://drive.google.com/drive/folders/THU_MUC_MAU_123
+```
+
+### 2. Tạo thư viện
+
+Mở VBook Library, chọn **Tạo thư viện**, rồi nhập link Drive, tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự.
+
+![Giao diện tạo thư viện với dữ liệu giả](docs/images/tao-thu-vien.png)
+
+Bấm **Tạo thư viện & link OPDS** và lưu ngay:
+
+- **Mã thư viện** để đăng nhập lại.
+- **Mã khôi phục** để đặt lại mật khẩu quản lý.
+- **Mật khẩu OPDS** để kết nối vBook.
+
+Mã khôi phục và mật khẩu OPDS chỉ hiển thị khi vừa được cấp. Không nhập mật khẩu quản lý vào vBook.
+
+### 3. Quản lý sách
+
+![Giao diện quản lý thư viện với dữ liệu giả](docs/images/quan-ly-thu-vien.png)
+
+Bạn có thể duyệt thư mục, đổi giữa kệ và bảng, tìm/lọc sách, sửa metadata, thêm URL bìa HTTPS và gán ngôn ngữ hàng loạt. Bấm **Kiểm tra toàn thư viện** để quét mọi thư mục con; không đóng hoặc tải lại trang khi đang quét.
+
+Các thay đổi chỉ tác động đến thông tin hiển thị trong thư viện. Tên và nội dung file trên Drive không bị sửa.
+
+### 4. Kết nối vBook
+
+Trong trang quản lý, bấm **Kết nối vBook**.
+
+![Hộp kết nối vBook với dữ liệu giả](docs/images/ket-noi-vbook.png)
+
+1. Sao chép link OPDS.
+2. Trong vBook, mở **Extension Cloud → OPDS** và tạo nguồn mới.
+3. Dán link vào **URL danh mục**.
+4. Nhập username `reader` và mật khẩu OPDS của thư viện.
+5. Lưu và mở kho sách.
+
+Ví dụ giả, không dùng để đăng nhập:
+
+```text
+URL:      https://vbook-opds.example/o/THUVIENMAU12
+Username: reader
+Password: mat-khau-mau-khong-dung-that
+```
+
+Feed tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi sửa metadata, hãy làm mới catalog trong vBook vì ứng dụng có thể giữ cache riêng.
+
+### Đăng nhập lại và khôi phục
+
+Để đăng nhập lại, nhập mã thư viện, tên đăng nhập và mật khẩu quản lý tại tab **Đăng nhập**. Nếu quên mật khẩu, dùng tab **Khôi phục** cùng mã khôi phục đã lưu.
+
+Sau khi khôi phục, mã khôi phục, phiên đăng nhập và mật khẩu OPDS cũ hết hiệu lực. Hãy lưu thông tin mới và cập nhật vBook. Hệ thống không khôi phục qua email.
+
+### Sáng/tối
+
+Bấm biểu tượng mặt trăng hoặc mặt trời trên thanh đầu trang. Lựa chọn được lưu trên thiết bị; nếu chưa chọn, giao diện theo cài đặt hệ thống.
+
+### Lỗi thường gặp
+
+| Hiện tượng | Cách xử lý |
+|---|---|
+| Không đọc được thư mục Drive | Kiểm tra quyền chia sẻ là **Bất kỳ ai có đường liên kết** và **Người xem** |
+| vBook báo sai tài khoản | Username OPDS luôn là `reader`; không dùng tên đăng nhập quản lý |
+| vBook báo sai mật khẩu | Dùng mật khẩu OPDS, không dùng mật khẩu quản lý |
+| Không thấy thông tin vừa sửa | Làm mới hoặc mở lại kho OPDS trong vBook |
+| Quên mật khẩu OPDS | Mở **Kết nối vBook** và tạo lại mật khẩu OPDS |
+| Quét bị dừng | Chờ khoảng một phút rồi bấm **Tiếp tục / thử lại** |
+| Ảnh bìa không hiện | Dùng URL `https://`; máy chủ ảnh có thể chặn truy cập ngoài |
+| Không tìm thấy toàn bộ sách | Chạy **Kiểm tra toàn thư viện**; tìm kiếm web chỉ áp dụng trên dữ liệu đã tải |
+
+Không chia sẻ mã khôi phục hoặc mật khẩu, không chụp màn hình chứa thông tin thật và không đặt API key/secret trong URL OPDS. Xóa thư viện trên web không xóa file trong Google Drive.
 
 ## Giới hạn và dữ liệu lưu
 
@@ -77,7 +148,30 @@ Feed tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi s�
 
 ## Triển khai
 
-Xem [hướng dẫn triển khai](docs/deployment.md). Production cần D1, migrations và Worker secrets. `reading-room/` chỉ là mã tham chiếu, không phải endpoint của ứng dụng chính.
+Yêu cầu Node.js 22.13+, pnpm, tài khoản Cloudflare Workers/D1, Google Drive API key và `MASK_SECRET` ngẫu nhiên ổn định dài ít nhất 32 ký tự.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm exec wrangler login
+pnpm exec wrangler d1 create vbook-library
+cp wrangler.production.toml.example wrangler.production.toml
+```
+
+Thay `replace-with-your-d1-database-id` trong file local `wrangler.production.toml`, sau đó chạy:
+
+```sh
+pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.production.toml
+pnpm exec wrangler secret put GOOGLE_API_KEY --config wrangler.production.toml
+pnpm exec wrangler secret put MASK_SECRET --config wrangler.production.toml
+pnpm run precommit
+pnpm run bundle
+pnpm run test:runtime
+pnpm run deploy
+```
+
+`wrangler.production.toml` bị Git bỏ qua. Không lưu API key, `MASK_SECRET`, mật khẩu hoặc ID hạ tầng trong repository, URL hay ảnh chụp. Sao lưu D1 trước migration mới và giữ `MASK_SECRET` ổn định; thay hoặc mất secret sẽ làm hỏng token nguồn và ánh xạ metadata hiện có.
+
+Sau deploy, dùng một thư mục Drive thử để kiểm tra tạo thư viện, quét thư mục con, sửa metadata, Basic Auth OPDS, phân trang, bìa và tải sách trên vBook thật. Theo dõi lỗi 401/429/5xx và mức sử dụng D1/Drive trên Cloudflare; không ghi credential hoặc URL Drive vào log.
 
 ## Tương thích bản cũ
 
@@ -99,5 +193,3 @@ Xem [hướng dẫn triển khai](docs/deployment.md). Production cần D1, migr
 | HTML/CSS và tương tác UI | `src/library-ui.ts`, `src/library-client.ts` |
 | Đọc metadata Google Drive | `src/drive.ts` |
 | Schema D1 | `migrations/` (apply every file in order) |
-
-`reading-room/` giữ làm bản tham chiếu, không phải backend thứ hai của sản phẩm mới.

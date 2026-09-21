@@ -1,6 +1,6 @@
 # Security
 
-This repository contains a managed Cloudflare Worker and a separate Reading Room sample. The managed Worker is the supported application; the sample is reference code.
+This repository contains the VBook Library Cloudflare Worker and its supporting tests and documentation.
 
 Report vulnerabilities privately to the repository owner. Do not include real credentials, Drive IDs, database exports or acquisition URLs in public issues.
 

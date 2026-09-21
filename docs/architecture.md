@@ -4,7 +4,7 @@
 
 ## Kiến trúc hiện tại
 
-Ứng dụng gốc vẫn là Hono + TypeScript trên Cloudflare Workers. Giao diện Reading Room tích hợp ở `/`; giao diện tạo link cũ chuyển sang `/legacy`.
+Ứng dụng là Hono + TypeScript trên Cloudflare Workers. Giao diện quản lý tích hợp ở `/`; giao diện tạo link cũ chuyển sang `/legacy`.
 
 Luồng quản lý: cookie phiên → xác thực thư viện → Drive API chỉ đọc metadata → ghép chỉnh sửa D1 → JSON cho web. Luồng OPDS: Basic Auth riêng → cùng bước đọc/ghép dữ liệu → Atom XML hoặc OPDS JSON → HTTP 302 tải file từ Drive.
 
@@ -16,7 +16,7 @@ Tham chiếu quản lý dùng AES-GCM với miền khóa riêng. Masking Folder 
 
 Feed/API thư viện mới dùng `private, no-store`; cache legacy và giới hạn tìm kiếm OPDS cũ giữ nguyên. Chi phí phụ thuộc mức sử dụng, không đảm bảo $0 vô hạn. Masking không biến file Drive công khai thành file riêng tư.
 
-Xem [README](../README.md), [triển khai](deployment.md).
+Xem hướng dẫn sử dụng và triển khai trong [README](../README.md).
 
 ---
 
