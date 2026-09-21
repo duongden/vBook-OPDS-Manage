@@ -1,4 +1,4 @@
-# VBook Library / OPDS Gateway — v1.6.1
+# VBook Library / OPDS Gateway — v1.6.2
 
 Giao diện quản lý thư viện Google Drive và các catalog OPDS được chia sẻ dành cho vBook. Web có thể gộp hai loại nguồn vào một link OPDS ngắn, có tài khoản riêng.
 
@@ -74,7 +74,7 @@ https://drive.google.com/drive/folders/THU_MUC_MAU_123
 
 ### 2. Tạo thư viện
 
-Mở VBook Library, chọn **Tạo thư viện**, rồi nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự. Ô nguồn tự nhận biết link `drive.google.com` hoặc URL OPDS HTTPS. Nếu nhập OPDS, nguồn đó được thêm ngay khi tạo thư viện; bạn cũng có thể để trống và thêm nhiều nguồn ở bước 3.
+Mở VBook Library, chọn **Tạo thư viện**, rồi dán mỗi nguồn trên một dòng. Hệ thống nhận tối đa 10 URL OPDS HTTPS và một link `drive.google.com`, sau đó gộp tất cả vào cùng một catalog. Nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự; bạn cũng có thể để trống danh sách và thêm nguồn ở bước 3.
 
 ![Giao diện tạo thư viện với dữ liệu giả](docs/images/tao-thu-vien.png)
 

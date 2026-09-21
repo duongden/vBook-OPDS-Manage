@@ -48,7 +48,7 @@ globalThis.fetch = (async (input: any, init?: any) => {
     const headers = new Headers(init?.headers);
     if (headers.has('authorization')) assert.equal(headers.get('authorization'), 'Basic '+btoa('shared:source-secret'), 'Upstream credential is only sent by the proxy');
     if (url.pathname === '/book.epub') return new Response('fake-epub', {headers:{'Content-Type':'application/epub+zip','Content-Disposition':'attachment; filename="sample.epub"'}});
-    const title = url.pathname === '/sub' ? 'Kệ con' : 'Kho sách được chia sẻ';
+    const title = url.pathname === '/sub' ? 'Kệ con' : url.pathname === '/second' ? 'Kho thứ hai' : 'Kho sách được chia sẻ';
     return new Response(`<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:fake:${url.pathname}</id><title>${title}</title><link rel="subsection" href="/sub"/><entry><id>urn:fake:book</id><title>Sách mẫu</title><link rel="http://opds-spec.org/acquisition" href="/book.epub" type="application/epub+zip"/><link rel="http://opds-spec.org/image" href="https://images.example/cover.jpg"/></entry></feed>`, {headers:{'Content-Type':'application/atom+xml;charset=utf-8'}});
   }
   assert.equal(url.hostname, 'www.googleapis.com', 'Only Google API metadata is fetched by the backend');
@@ -182,12 +182,12 @@ test('external OPDS sources aggregate behind short authenticated proxy links', a
   changed=await h.req(base(a)+'/sources/'+source.id,'DELETE',{});assert.equal(changed.status,200);assert.deepEqual((await changed.json() as any).sources,[]);
   assert.equal((await h.req(base(a)+'/sources','POST',{sources:[{url:'https://127.0.0.1/opds'}]})).status,400);
 });
-test('a pasted OPDS URL creates an external-only library and adds its first source',async()=>{
+test('multiple pasted OPDS URLs create one aggregate catalog without Drive',async()=>{
   const h=harness();const before=driveCalls;
-  const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kho OPDS',drive:'https://catalog.example/opds',username:'owner',password:'long-password-123'}));
+  const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kho OPDS',drive:'https://catalog.example/opds\nhttps://catalog.example/second',username:'owner',password:'long-password-123'}));
   assert.equal(driveCalls,before);const items=await(await h.req(base(a)+'/items')).json() as any;assert.deepEqual(items.items,[]);
-  const sources=await(await h.req(base(a)+'/sources')).json() as any;assert.equal(sources.sources.length,1);assert.equal(sources.sources[0].name,'Kho sách được chia sẻ');
-  const aggregate=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));assert.equal(aggregate.status,200);assert.match(await aggregate.text(),/Kho sách được chia sẻ/);
+  const sources=await(await h.req(base(a)+'/sources')).json() as any;assert.equal(sources.sources.length,2);assert.deepEqual(sources.sources.map((source:any)=>source.name),['Kho sách được chia sẻ','Kho thứ hai']);
+  const aggregate=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));assert.equal(aggregate.status,200);const xml=await aggregate.text();assert.match(xml,/Kho sách được chia sẻ/);assert.match(xml,/Kho thứ hai/);
 });
 test('same Drive file has isolated overrides and capabilities for each library', async()=>{
   const h=harness(),a=await h.create();const aItems=await(await h.req(base(a)+'/items')).json() as any;

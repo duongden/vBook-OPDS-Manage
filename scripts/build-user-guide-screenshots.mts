@@ -25,7 +25,7 @@ function notice(html: string, text: string): string {
 
 let create = notice(base('light'), 'Dữ liệu minh họa — tất cả đường dẫn, tên và tài khoản trong hình đều là giả.');
 create = create
-  .replace('<input name="drive" type="text"', '<input name="drive" type="text" value="https://drive.google.com/drive/folders/THU_MUC_MAU_123"')
+  .replace('<textarea name="drive" rows="4" maxlength="12000" placeholder="https://catalog-one.example/opds&#10;https://catalog-two.example/feed.xml"></textarea>', '<textarea name="drive" rows="4" maxlength="12000">https://catalog-one.example/opds\nhttps://catalog-two.example/feed.xml</textarea>')
   .replace('<input name="name"', '<input name="name" value="Góc sách mẫu"')
   .replace('<input name="username"', '<input name="username" value="nguoidung_mau"')
   .replace('<input name="password" type="password"', '<input name="password" type="password" value="MatKhauMau-1234"');

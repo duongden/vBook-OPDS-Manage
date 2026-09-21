@@ -110,14 +110,26 @@ api.post('/api/libraries', async c => {
   const name = stringInput(body.name, 120, 'Tên thư viện', true);
   const username = stringInput(body.username, 80, 'Tên đăng nhập', true);
   const password = passwordInput(body.password);
-  const input = stringInput(body.drive ?? '', 2048, 'Link Drive');
-  let folder = '', initialOpds: Record<string, unknown> | null = null;
-  if (input?.includes('://')) {
-    let parsed: URL; try { parsed = new URL(input); } catch { return fail(400, 'Link Drive hoặc OPDS không hợp lệ.'); }
-    if (parsed.hostname === 'drive.google.com') folder = extractFolderId(input) || '';
-    else initialOpds = { url: input };
-  } else if (input) folder = extractFolderId(input) || '';
-  if (input && !initialOpds && (!folder || !/^[\w-]{10,60}$/.test(folder))) return fail(400, 'Link thư mục Drive không hợp lệ.');
+  const input = stringInput(body.drive ?? '', 12000, 'Danh sách nguồn');
+  const inputs = [...new Set(input.split(/\r?\n/).map(value => value.trim()).filter(Boolean))];
+  if (inputs.length > 11) fail(400, 'Tối đa 10 nguồn OPDS và một thư mục Drive.');
+  let folder = '';
+  const initialOpds: Record<string, unknown>[] = [];
+  for (const value of inputs) {
+    if (value.includes('://')) {
+      let parsed: URL; try { parsed = new URL(value); } catch { return fail(400, 'Link Drive hoặc OPDS không hợp lệ.'); }
+      if (parsed.hostname === 'drive.google.com') {
+        if (folder) fail(400, 'Mỗi thư viện chỉ dùng tối đa một thư mục Drive.');
+        folder = extractFolderId(value) || '';
+        if (!folder) fail(400, 'Link thư mục Drive không hợp lệ.');
+      } else initialOpds.push({ url: value });
+    } else {
+      if (folder) fail(400, 'Mỗi thư viện chỉ dùng tối đa một thư mục Drive.');
+      folder = extractFolderId(value) || '';
+      if (!folder) fail(400, 'Folder ID không hợp lệ.');
+    }
+  }
+  if (initialOpds.length > 10) fail(400, 'Tối đa 10 nguồn OPDS khi tạo thư viện.');
   if (folder) {
     // Confirm the supplied resource really is a readable folder (including empty ones).
     const url = new URL(`https://www.googleapis.com/drive/v3/files/${folder}`);
@@ -128,12 +140,12 @@ api.post('/api/libraries', async c => {
     if (meta.mimeType !== 'application/vnd.google-apps.folder') fail(400, 'Link phải trỏ tới thư mục Drive.');
   }
   const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomToken(), opds = randomToken();
-  const source = initialOpds ? await prepareSource(c.env.MASK_SECRET, id, initialOpds) : null;
+  const sources = await Promise.all(initialOpds.map(source => prepareSource(c.env.MASK_SECRET, id, source)));
   const now = Date.now();
   const statements = [c.env.DB.prepare('INSERT INTO libraries (id, short_id, name, root_token, username, password_hash, recovery_hash, opds_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(id, shortId, name, folder ? await maskFolderId(folder, c.env.MASK_SECRET) : '', username, await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(recovery), await digest(`reader:${opds}`), now)];
-  if (source) statements.push(c.env.DB.prepare('INSERT INTO opds_sources (id, library_id, short_id, name, config_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
-    .bind(source.id, id, source.shortId, source.name, source.token, now, now));
+  statements.push(...sources.map(source => c.env.DB.prepare('INSERT INTO opds_sources (id, library_id, short_id, name, config_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
+    .bind(source.id, id, source.shortId, source.name, source.token, now, now)));
   await c.env.DB.batch(statements);
   const csrf = await startSession(c, id, 0);
   const library = { id, short_id: shortId };
