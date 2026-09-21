@@ -1,4 +1,4 @@
-# VBook Library / OPDS Gateway — v1.6.2
+# VBook Library / OPDS Gateway — v1.7.0
 
 Giao diện quản lý thư viện Google Drive và các catalog OPDS được chia sẻ dành cho vBook. Web có thể gộp hai loại nguồn vào một link OPDS ngắn, có tài khoản riêng.
 
@@ -9,6 +9,7 @@ Giao diện quản lý thư viện Google Drive và các catalog OPDS được c
 - Tạo thư viện bằng một thư mục Drive, danh sách OPDS có sẵn, hoặc cả hai.
 - Thêm tối đa 10 URL OPDS mỗi lần; bật/tắt, sao chép link proxy ngắn hoặc xóa từng nguồn.
 - Gộp sách Drive và các catalog OPDS vào một URL `/o/:short_id`; credential của nguồn được mã hóa trước khi lưu.
+- Quét đồng thời Drive và các nguồn OPDS đang bật, đi theo catalog con/phân trang và gom sách vào cùng kết quả tìm/lọc trên web.
 - Kệ bìa / bảng danh sách, duyệt thư mục và phân trang.
 - Tìm/lọc trong dữ liệu đã tải theo tên, tác giả, ngôn ngữ, định dạng.
 - Quét toàn thư viện theo từng trang, không giới hạn 35 thư mục hoặc 3 cấp; tạm dừng/thử lại, đếm file duy nhất và hiển thị tiến độ.
@@ -104,6 +105,8 @@ Tài khoản nguồn không hiển thị lại trên giao diện. Nếu cần th
 
 Bạn có thể duyệt thư mục, đổi giữa kệ và bảng, tìm/lọc sách, sửa metadata, thêm URL bìa HTTPS và gán ngôn ngữ hàng loạt. Bấm **Kiểm tra toàn thư viện** để quét mọi thư mục con; không đóng hoặc tải lại trang khi đang quét.
 
+Nút **Kiểm tra toàn thư viện** cũng quét các nguồn OPDS đang bật. Sách từ OPDS có nhãn **OPDS**, được đưa vào thống kê và bộ lọc chung; metadata này do nguồn bên ngoài cung cấp nên chỉ đọc trên trang quản lý.
+
 Các thay đổi chỉ tác động đến thông tin hiển thị trong thư viện. Tên và nội dung file trên Drive không bị sửa.
 
 Nếu thư viện chỉ có nguồn OPDS, khu vực sách Drive sẽ trống; đây không phải lỗi.
@@ -162,6 +165,7 @@ Không chia sẻ mã khôi phục hoặc mật khẩu, không chụp màn hình 
 
 - Không có trình đọc online, upload bìa, OAuth Drive hoặc quyền ghi Drive.
 - Proxy OPDS chỉ theo link cùng hostname với URL nguồn. Link sang hostname khác được giữ trực tiếp và không nhận credential đã lưu.
+- Trình quét web chỉ đi theo catalog con và phân trang cùng hostname với nguồn. Metadata sách OPDS không được lưu vào D1 và không chỉnh sửa trên web.
 - Mỗi feed nguồn được giới hạn 2 MB và thời gian kết nối 20 giây. Việc đọc sách phụ thuộc vào tình trạng máy chủ OPDS bên ngoài.
 - Không lưu database toàn bộ danh mục. Kết quả quét chỉ ở bộ nhớ trang; reload phải quét lại. Kho lớn tiêu tốn quota Drive và bộ nhớ trình duyệt.
 - Tìm/lọc **web** áp dụng trên tập đã tải; chỉ đủ toàn kho sau khi quét xong.
@@ -213,6 +217,7 @@ Sau deploy, dùng một thư mục Drive thử để kiểm tra tạo thư việ
 | Router Gateway và giao diện gốc | `src/index.ts` |
 | API quản lý, OPDS có tài khoản | `src/library.ts` |
 | Kiểm tra, mã hóa cấu hình và proxy nguồn OPDS | `src/opds-source.ts` |
+| Đọc catalog/phân trang và chuẩn hóa sách OPDS để quét | `src/opds-scan.ts` |
 | Tham chiếu mã hóa, password hash, HMAC | `src/library-security.ts` |
 | D1, kiểm tra và ghép metadata | `src/library-data.ts` |
 | Feed thư viện mới | `src/library-feed.ts` |

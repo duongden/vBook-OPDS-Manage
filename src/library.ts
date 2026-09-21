@@ -8,6 +8,7 @@ import { Library, getLibrary, presentItems, saveOverride, validateOverrides } fr
 import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomToken, revealData, seal, stringInput, unseal } from './library-security';
 import { managedFeed, XML_TYPE } from './library-feed';
 import { fetchOpds, OpdsSourceConfig, OpdsSourceRow, rewriteOpdsBody, safeOpdsUrl, sourceConfig, sourceToken, validateOpds } from './opds-source';
+import { scanOpdsSource } from './opds-scan';
 
 export interface LibraryEnv { DB: D1Database; MASK_SECRET: string; GOOGLE_API_KEY: string }
 interface Session { library_id: string; csrf: string; expires_at: number }
@@ -80,7 +81,7 @@ async function session(c: C): Promise<Session> {
   if (!['GET', 'HEAD'].includes(c.req.method) && !equal(c.req.header('X-CSRF-Token') || '', row.csrf)) fail(403, 'Phiên thao tác không hợp lệ. Hãy tải lại trang.');
   return row;
 }
-function publicLibrary(l: Library) { return { id: l.id, shortId: l.short_id, name: l.name, username: l.username, createdAt: l.created_at }; }
+function publicLibrary(l: Library) { return { id: l.id, shortId: l.short_id, name: l.name, username: l.username, hasDrive: Boolean(l.root_token), createdAt: l.created_at }; }
 function credentials(c: C, library: Pick<Library, 'id' | 'short_id'>, password: string) {
   const path = library.short_id ? `/o/${library.short_id}` : `/library/${library.id}/opds`;
   return { url: `${new URL(c.req.url).origin}${path}`, username: 'reader', password };
@@ -149,7 +150,7 @@ api.post('/api/libraries', async c => {
   await c.env.DB.batch(statements);
   const csrf = await startSession(c, id, 0);
   const library = { id, short_id: shortId };
-  return c.json({ library: { id, shortId, name, username }, csrf, recoveryCode: recovery, opds: credentials(c, library, opds) }, 201);
+  return c.json({ library: { id, shortId, name, username, hasDrive: Boolean(folder) }, csrf, recoveryCode: recovery, opds: credentials(c, library, opds) }, 201);
 });
 api.post('/api/session', async c => {
   await rateLimit(c, 'login');
@@ -245,6 +246,18 @@ api.get('/api/libraries/:id/items', async c => c.json(await readPage(c, c.get('l
 // Client owns BFS queue and deduplication. One request reads one Drive page; no tree-size cap.
 api.post('/api/libraries/:id/scan', async c => {
   const body = await jsonBody(c);
+  if (body.sourceId !== undefined) {
+    const sourceId = stringInput(body.sourceId, 80, 'Mã nguồn OPDS', true);
+    const target = body.target ?? body.cursor;
+    const targetToken = target === undefined ? '' : stringInput(target, 16000, 'Trang OPDS');
+    const row = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE id = ? AND library_id = ? AND enabled = 1').bind(sourceId, c.get('library').id).first<OpdsSourceRow>();
+    if (!row) fail(404, 'Không tìm thấy nguồn OPDS hoặc nguồn đang tắt.');
+    try { return c.json(await scanOpdsSource(c.env.MASK_SECRET, c.get('library').id, row!, targetToken)); }
+    catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return fail(503, 'Không kết nối được nguồn OPDS trong lúc quét. Hãy thử lại hoặc tắt nguồn lỗi.');
+    }
+  }
   const folder = body.folder === undefined ? undefined : stringInput(body.folder, 16000, 'Thư mục');
   const cursor = body.cursor === undefined ? undefined : stringInput(body.cursor, 16000, 'Con trỏ');
   return c.json(await readPage(c, c.get('library'), { folder, cursor }));

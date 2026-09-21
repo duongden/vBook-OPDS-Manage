@@ -100,6 +100,7 @@ test('managed UI is available without DB; legacy endpoints remain separate; JS p
   assert.match(libraryCss,/--control-height: 44px/);
   assert.match(libraryCss,/\.view-toggle \{[^}]*height: var\(--control-height\)/s);
   assert.match(libraryCss,/\.shelf-head nav \{[^}]*justify-content: flex-start/s);
+  assert.match(libraryCss,/\.source-credentials label \{[^}]*justify-content: flex-end/s);
   const uiDocument=new JSDOM(libraryHtml).window.document;
   for(const button of uiDocument.querySelectorAll('.icon-button')) assert.ok(button.getAttribute('aria-label'));
   new Script(libraryClient);
@@ -173,6 +174,11 @@ test('external OPDS sources aggregate behind short authenticated proxy links', a
   const bookUrl=new URL(acquisition.getAttribute('href')!,'https://library.example');
   const book=await h.req(bookUrl.pathname+bookUrl.search,'GET',undefined,auth(a));assert.equal(book.status,200);assert.equal(await book.text(),'fake-epub');
   parserWindow.close();
+
+  const scanned=await h.req(base(a)+'/scan','POST',{sourceId:source.id});assert.equal(scanned.status,200);const scan=await scanned.json() as any;
+  const scannedBook=scan.items.find((item:any)=>!item.isFolder),scannedFolder=scan.items.find((item:any)=>item.isFolder);
+  assert.equal(scannedBook.title,'Sách mẫu');assert.equal(scannedBook.format,'EPUB');assert.equal(scannedBook.external,true);assert.equal(scannedBook.sourceName,'Kho sách được chia sẻ');
+  assert.equal(scan.nextCursor,null);assert.ok(scannedFolder.ref);const child=await h.req(base(a)+'/scan','POST',{sourceId:source.id,target:scannedFolder.ref});assert.equal(child.status,200);const childData=await child.json() as any;assert.equal(childData.items.some((item:any)=>item.title==='Sách mẫu'),true);assert.equal(childData.nextCursor,null);assert.equal(childData.folderKey,scannedFolder.key);assert.equal(childData.items.find((item:any)=>item.isFolder).key,scannedFolder.key);
 
   let changed=await h.req(base(a)+'/sources/'+source.id,'PATCH',{enabled:false});assert.equal(changed.status,200);
   assert.equal((await changed.json() as any).sources[0].enabled,false);
@@ -282,7 +288,7 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     if(r.headers.has('set-cookie'))cookie=r.headers.get('set-cookie')!.split(';')[0];
     return r;
   }) as any;
-  const wait=async(predicate:()=>boolean)=>{for(let i=0;i<300;i++){if(predicate())return;await new Promise(r=>setTimeout(r,5));}assert.fail('UI condition timed out: '+d.querySelector('#notice')!.textContent+' / '+errors.map(String).join(';'));};
+  const wait=async(predicate:()=>boolean)=>{for(let i=0;i<300;i++){if(predicate())return;await new Promise(r=>setTimeout(r,5));}assert.fail('UI condition timed out: '+d.querySelector('#notice')!.textContent+' / scan: '+d.querySelector('#scan-status')!.textContent+' / '+errors.map(String).join(';'));};
   const field=(form:string,name:string,value:string)=>{(d.querySelector(form) as HTMLFormElement).elements.namedItem(name).value=value;};
   const submit=(id:string)=>d.querySelector(id)!.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   const click=(id:string)=>(d.querySelector(id) as HTMLButtonElement).click();
@@ -310,7 +316,7 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     search.value='';search.dispatchEvent(new w.Event('input'));assert.ok(!d.querySelector('#items')!.textContent!.includes('Tên sửa UI'));
     holdScan=true;click('#scan-start');await wait(()=>scanStarted);click('#scan-pause');holdScan=false;click('#scan-resume');
     await wait(()=>d.querySelector('#scan-status')!.textContent!.startsWith('Hoàn tất'));
-    assert.match(d.querySelector('#scan-status')!.textContent!,/6 file sách/);
+    assert.match(d.querySelector('#scan-status')!.textContent!,/7 file sách/);assert.ok(d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#items')!.textContent!.includes('OPDS'));
     click('#logout');await wait(()=>!(d.querySelector('#welcome') as HTMLElement).hidden);
     assert.equal(d.querySelector('#secret-values')!.textContent,'');assert.equal(d.querySelectorAll('#items .book').length,0);
     assert.deepEqual(errors,[]);

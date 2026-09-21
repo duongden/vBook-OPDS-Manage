@@ -66,17 +66,17 @@ function fillFilters(){
 }
 function render(){
  const all=[...source().values()],books=all.filter(b=>!b.isFolder),list=filtered();
- const counts=[['File sách đã tải',books.length],['Định dạng',new Set(books.map(b=>b.format)).size],['Chưa có ngôn ngữ',books.filter(b=>!b.language).length],['Chưa có nguồn bìa',books.filter(b=>!b.coverUrl).length]];
+ const counts=[['Sách trong kết quả',books.length],['Định dạng',new Set(books.map(b=>b.format)).size],['Chưa có ngôn ngữ',books.filter(b=>!b.language).length],['Chưa có nguồn bìa',books.filter(b=>!b.coverUrl).length]];
  $('#stats').innerHTML=counts.map(([label,count])=>'<div class="stat"><strong>'+count.toLocaleString('vi')+'</strong><span>'+label+'</span></div>').join('');
  const formats={};books.forEach(b=>formats[b.format]=(formats[b.format]||0)+1);$('#formats').textContent=Object.entries(formats).map(([k,v])=>k+': '+v).join(' · ');
  $('#result-count').textContent=list.length+' mục hiển thị · '+(scanMode?(scanComplete?'Toàn thư viện, theo lần quét vừa xong':'Kết quả quét chưa đầy đủ'):'Thư mục hiện tại, dữ liệu đã tải');
  $('#breadcrumbs').innerHTML='<button data-crumb="-1">Thư viện</button>'+(scanMode?'<span>/ Kết quả quét</span>':trail.map((t,i)=>'<span>/</span><button data-crumb="'+i+'">'+escapeHtml(t.title)+'</button>').join(''));
- if(!list.length)$('#items').innerHTML='<div class="empty">'+(busy?'Đang lấy danh sách từ Drive…':'Chưa có mục phù hợp. Thử thay đổi bộ lọc hoặc tải thêm dữ liệu.')+'</div>';
- else if(view==='grid')$('#items').innerHTML='<div class="books">'+list.map(b=>'<article class="book '+(b.isFolder?'folder':'')+'">'+(!b.isFolder?'<label class="check"><input type="checkbox" data-select="'+b.key+'" '+(selected.has(b.key)?'checked':'')+'> Chọn sách</label>':'')+'<button class="book-open" data-open="'+b.key+'">'+coverMarkup(b)+'<span class="book-title">'+escapeHtml(b.title)+'</span></button><div class="book-author">'+escapeHtml(b.author|| (b.isFolder?'Mở thư mục':'Chưa có tác giả'))+'</div>'+(!b.isFolder?'<div class="book-meta"><span class="badge">'+escapeHtml(b.format)+'</span><span>'+escapeHtml(langName(b.language))+'</span><span>'+sizeName(b.size)+'</span></div>':'')+'</article>').join('')+'</div>';
- else $('#items').innerHTML='<div class="table-wrap"><table><thead><tr><th>Chọn</th><th>Tên sách / mã mục</th><th>Ngôn ngữ</th><th>Định dạng</th><th>Dung lượng</th><th></th></tr></thead><tbody>'+list.map(b=>'<tr><td>'+(!b.isFolder?'<input aria-label="Chọn '+escapeHtml(b.title)+'" type="checkbox" data-select="'+b.key+'" '+(selected.has(b.key)?'checked':'')+'>':'')+'</td><td><div class="table-title">'+(b.coverUrl?'<img class="thumb" alt="" src="'+escapeHtml(b.coverUrl)+'" referrerpolicy="no-referrer" loading="lazy">':'')+'<div><button data-open="'+b.key+'">'+escapeHtml(b.title)+'</button><small>'+escapeHtml(b.author)+'</small><small>'+escapeHtml(b.key)+'</small></div></div></td><td>'+escapeHtml(b.isFolder?'—':langName(b.language))+'</td><td>'+escapeHtml(b.isFolder?'Thư mục':b.format)+'</td><td>'+sizeName(b.size)+'</td><td><button data-open="'+b.key+'">'+(b.isFolder?'Mở':'Sửa')+'</button></td></tr>').join('')+'</tbody></table></div>';
+ if(!list.length)$('#items').innerHTML='<div class="empty">'+(busy?'Đang lấy danh sách nguồn…':'Chưa có mục phù hợp. Thử thay đổi bộ lọc hoặc quét lại các nguồn.')+'</div>';
+ else if(view==='grid')$('#items').innerHTML='<div class="books">'+list.map(b=>'<article class="book '+(b.isFolder?'folder':'')+'">'+(!b.isFolder&&!b.external?'<label class="check"><input type="checkbox" data-select="'+b.key+'" '+(selected.has(b.key)?'checked':'')+'> Chọn sách</label>':b.external?'<span class="external-label">OPDS</span>':'')+'<button class="book-open" data-open="'+b.key+'">'+coverMarkup(b)+'<span class="book-title">'+escapeHtml(b.title)+'</span></button><div class="book-author">'+escapeHtml(b.author||b.sourceName|| (b.isFolder?'Mở thư mục':'Chưa có tác giả'))+'</div>'+(!b.isFolder?'<div class="book-meta"><span class="badge">'+escapeHtml(b.format)+'</span><span>'+escapeHtml(langName(b.language))+'</span><span>'+sizeName(b.size)+'</span></div>':'')+'</article>').join('')+'</div>';
+ else $('#items').innerHTML='<div class="table-wrap"><table><thead><tr><th>Chọn</th><th>Tên sách / mã mục</th><th>Ngôn ngữ</th><th>Định dạng</th><th>Dung lượng</th><th></th></tr></thead><tbody>'+list.map(b=>'<tr><td>'+(!b.isFolder&&!b.external?'<input aria-label="Chọn '+escapeHtml(b.title)+'" type="checkbox" data-select="'+b.key+'" '+(selected.has(b.key)?'checked':'')+'>':b.external?'<span class="badge">OPDS</span>':'')+'</td><td><div class="table-title">'+(b.coverUrl?'<img class="thumb" alt="" src="'+escapeHtml(b.coverUrl)+'" referrerpolicy="no-referrer" loading="lazy">':'')+'<div><button data-open="'+b.key+'">'+escapeHtml(b.title)+'</button><small>'+escapeHtml(b.author||b.sourceName)+'</small><small>'+escapeHtml(b.key)+'</small></div></div></td><td>'+escapeHtml(b.isFolder?'—':langName(b.language))+'</td><td>'+escapeHtml(b.isFolder?'Thư mục':b.format)+'</td><td>'+sizeName(b.size)+'</td><td><button data-open="'+b.key+'">'+(b.isFolder?'Mở':b.external?'Nguồn OPDS':'Sửa')+'</button></td></tr>').join('')+'</tbody></table></div>';
  attachImageFallback($('#items'));$('#load-more').hidden=scanMode||!nextCursor;$('#load-more').disabled=busy;
  $('#selected-count').textContent=selected.size+' đã chọn';$('#bulk-apply').disabled=!selected.size||busy;
- const visibleBooks=list.filter(b=>!b.isFolder);$('#select-all').checked=visibleBooks.length>0&&visibleBooks.every(b=>selected.has(b.key));
+ const visibleBooks=list.filter(b=>!b.isFolder&&!b.external);$('#select-all').checked=visibleBooks.length>0&&visibleBooks.every(b=>selected.has(b.key));
  $('#select-all').indeterminate=visibleBooks.some(b=>selected.has(b.key))&&!$('#select-all').checked;
 }
 async function browse(append){
@@ -96,14 +96,14 @@ async function scanLoop(){
  try{
   while(epoch===scanEpoch&&scanRunning&&scanQueue.length&&library&&library.id===currentLibrary){
    const job=scanQueue[0];scanController=new AbortController();
-   const data=await api(endpoint('/scan'),'POST',{...(job.ref?{folder:job.ref}:{}),...(job.cursor?{cursor:job.cursor}:{})},scanController.signal);
+   const data=await api(endpoint('/scan'),'POST',{...(job.sourceId?{sourceId:job.sourceId}:{}),...(job.ref?(job.sourceId?{target:job.ref}:{folder:job.ref}):{}),...(job.cursor?{cursor:job.cursor}:{})},scanController.signal);
    if(epoch!==scanEpoch||!scanRunning||!library||library.id!==currentLibrary)break;
    scanSeen.add(data.folderKey);scanQueue.shift();scanPages++;
    data.items.forEach(b=>{
-    if(b.isFolder){if(!scanSeen.has(b.key)){scanSeen.add(b.key);scanQueue.push({ref:b.ref});}}
+    if(b.isFolder){if(!scanSeen.has(b.key)){scanSeen.add(b.key);scanQueue.push({ref:b.ref,...(b.sourceId?{sourceId:b.sourceId}:{})});}}
     else scanItems.set(b.key,b);
    });
-   if(data.nextCursor)scanQueue.unshift({ref:job.ref,cursor:data.nextCursor});
+   if(data.nextCursor)scanQueue.unshift({...job,cursor:data.nextCursor});
    scanComplete=scanQueue.length===0;
    $('#scan-status').textContent=(scanComplete?'Hoàn tất — ':'Đang quét — ')+scanPages+' trang, '+scanItems.size+' file sách. '+(scanComplete?'Số liệu theo lần quét này; tải lại trang sẽ cần quét lại.':scanQueue.length+' lượt thư mục/trang còn chờ.');
    if(scanMode){fillFilters();render();}scanControls();
@@ -114,6 +114,7 @@ async function scanLoop(){
 function openBook(key){
  const b=source().get(key);if(!b)return;
  if(b.isFolder){pauseScan();trail.push({title:b.title,ref:b.ref});browse(false);return;}
+ if(b.external){notice('Sách này thuộc nguồn OPDS “'+(b.sourceName||'bên ngoài')+'”. Metadata được đọc từ nguồn và không chỉnh sửa tại đây.');return;}
  editing=b;const f=$('#edit-form');f.reset();['title','author','language','category','description','coverUrl'].forEach(k=>f.elements[k].value=b.overrides[k]||'');f.elements.title.placeholder=b.name;
  $('#edit-source').textContent=b.name+' · '+b.format+' · '+sizeName(b.size);$('#edit-error').textContent='';previewCover();$('#editor').showModal();
 }
@@ -153,10 +154,10 @@ $('#source-list').addEventListener('change',async event=>{const input=event.targ
 $('#search').addEventListener('input',render);['language','format','sort'].forEach(id=>$('#'+id).addEventListener('change',render));
 ['grid','table'].forEach(mode=>$('#view-'+mode).addEventListener('click',()=>{view=mode;['grid','table'].forEach(m=>$('#view-'+m).setAttribute('aria-pressed',String(m===mode)));render();}));
 $('#load-more').addEventListener('click',()=>{if(!busy)browse(true);});$('#reload-folder').addEventListener('click',()=>{pauseScan();trail=[];browse(false);});
-$('#scan-start').addEventListener('click',()=>{if(scanPages&&!confirm('Quét lại toàn thư viện từ đầu?'))return;scanItems.clear();scanSeen.clear();scanQueue=[{}];scanPages=0;scanComplete=false;scanLoop();});
+$('#scan-start').addEventListener('click',()=>{if(scanPages&&!confirm('Quét lại toàn thư viện từ đầu?'))return;scanItems.clear();scanSeen.clear();scanQueue=[...(library.hasDrive?[{}]:[]),...sources.filter(source=>source.enabled).map(source=>({sourceId:source.id}))];scanPages=0;scanComplete=false;if(!scanQueue.length){$('#scan-status').textContent='Chưa có nguồn Drive hoặc OPDS đang bật để quét.';return;}scanLoop();});
 $('#scan-pause').addEventListener('click',()=>{pauseScan();$('#scan-status').textContent='Đã tạm dừng. Kết quả chưa đầy đủ; có thể tiếp tục trong phiên trang này.';});$('#scan-resume').addEventListener('click',scanLoop);
 $('#scan-results').addEventListener('click',()=>{requestEpoch++;busy=false;scanMode=true;selected.clear();fillFilters();render();});
-$('#select-all').addEventListener('change',event=>{filtered().filter(b=>!b.isFolder).forEach(b=>event.target.checked?selected.add(b.key):selected.delete(b.key));render();});
+$('#select-all').addEventListener('change',event=>{filtered().filter(b=>!b.isFolder&&!b.external).forEach(b=>event.target.checked?selected.add(b.key):selected.delete(b.key));render();});
 $('#bulk-apply').addEventListener('click',async()=>{
  const books=[...selected].map(k=>source().get(k)).filter(Boolean);if(!books.length)return;busy=true;render();let done=0;
  try{for(let i=0;i<books.length;i+=50){const batch=books.slice(i,i+50);const data=await api(endpoint('/language'),'POST',{refs:batch.map(b=>b.ref),language:$('#bulk-language').value.trim()});batch.forEach(b=>{const o={...b.overrides};if(data.language)o.language=data.language;else delete o.language;applyOverrides(b.key,o);selected.delete(b.key);});done+=batch.length;}notice('Đã cập nhật ngôn ngữ cho '+done+' sách.');}
