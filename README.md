@@ -2,6 +2,8 @@
 
 Giao diện quản lý thư viện Google Drive, xây trên Gateway v1.4.1 và bố cục Reading Room. Web dùng để kiểm tra sách và chỉnh sửa thông tin; vBook dùng để tải và đọc qua OPDS 1.2 hoặc 2.0.
 
+> **Bạn chỉ muốn tạo kho sách và thêm vào vBook?** Xem [Hướng dẫn sử dụng dành cho người dùng thông thường](HUONG-DAN-SU-DUNG.md). Hướng dẫn có hình giao diện thật và chỉ sử dụng dữ liệu giả để minh họa.
+
 **Không lưu nội dung sách, không ghi vào Drive.** D1 chỉ lưu tài khoản, cấu hình thư viện, phiên đăng nhập và metadata chỉnh sửa. Nguồn Drive cần được chia sẻ “Bất kỳ ai có đường liên kết”; mật khẩu Gateway không thay đổi quyền truy cập file trên Google.
 
 ## Đã có
@@ -51,11 +53,14 @@ Các test không dùng tài khoản/file thật và không thay cho kiểm tra c
 
 ## Cách dùng
 
-1. Chia sẻ thư mục Drive bằng link, dán link vào trang chủ, đặt tên thư viện và tài khoản quản lý.
-2. Lưu **mã thư viện**, **mã khôi phục**, **mật khẩu OPDS** được cấp. Mã khôi phục chỉ hiện khi cấp mới; không có khôi phục qua email.
-3. Duyệt thư mục hoặc bấm **Kiểm tra toàn thư viện**. Tổng kho chỉ hoàn chỉnh khi quét báo hoàn tất.
-4. Bấm sách để sửa thông tin. Ô trống khôi phục giá trị nguồn. Ngôn ngữ chưa nhập là “Chưa rõ”.
-5. Bấm **Kết nối vBook**, sao chép URL, nhập vào Extension Cloud → OPDS với username `reader` và mật khẩu OPDS.
+Tóm tắt nhanh:
+
+1. Chia sẻ thư mục Drive ở chế độ **Bất kỳ ai có đường liên kết** và quyền **Người xem**.
+2. Dán link vào trang chủ, đặt tên thư viện và tài khoản quản lý.
+3. Lưu **mã thư viện**, **mã khôi phục** và **mật khẩu OPDS** được cấp.
+4. Bấm **Kết nối vBook**, sao chép URL và thêm vào **Extension Cloud → OPDS** với username `reader`.
+
+Xem hướng dẫn từng bước, cách quản lý sách, khôi phục tài khoản và xử lý lỗi tại [HUONG-DAN-SU-DUNG.md](HUONG-DAN-SU-DUNG.md).
 
 Feed tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi sửa, làm mới catalog trong vBook vì ứng dụng có thể giữ cache riêng.
 
