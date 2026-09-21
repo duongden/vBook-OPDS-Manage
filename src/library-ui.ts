@@ -12,7 +12,7 @@ export const libraryHtml = String.raw`<!doctype html>
 <div class="scanbar"><div><button id="scan-start">Kiểm tra toàn thư viện</button><button id="scan-pause" hidden>Tạm dừng</button><button id="scan-resume" hidden>Tiếp tục / thử lại</button><button id="scan-results" hidden>Xem kết quả quét</button></div><p id="scan-status" class="muted">Chưa quét toàn thư viện. Số liệu hiện chỉ thuộc dữ liệu đã tải.</p></div>
 <div class="tools"><label class="search">Tìm trong dữ liệu đã tải<input id="search" type="search" placeholder="Tên sách, tên file, tác giả…"></label><label>Ngôn ngữ<select id="language"><option value="">Tất cả</option><option value="unknown">Chưa rõ</option></select></label><label>Định dạng<select id="format"><option value="">Tất cả</option></select></label><label>Sắp xếp<select id="sort"><option value="title">Tên sách</option><option value="author">Tác giả</option><option value="size">Dung lượng giảm dần</option></select></label><div class="view-toggle" role="group" aria-label="Chế độ hiển thị"><button class="icon-button" id="view-grid" aria-label="Hiển thị dạng kệ" title="Dạng kệ" aria-pressed="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button><button class="icon-button" id="view-table" aria-label="Hiển thị dạng bảng" title="Dạng bảng" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg></button></div></div>
 <div class="shelf-head"><nav id="breadcrumbs" aria-label="Đường dẫn thư mục"></nav><span id="result-count" class="muted"></span></div>
-<div class="bulk"><label class="check"><input id="select-all" type="checkbox"> Chọn kết quả đang hiển thị</label><span id="selected-count">0 đã chọn</span><label>Ngôn ngữ <input id="bulk-language" list="languages" placeholder="vi, en, fr…" maxlength="35"></label><button id="bulk-apply">Gán cho sách đã chọn</button></div>
+<div class="bulk"><label class="check"><input id="select-all" type="checkbox"> Chọn kết quả đang hiển thị</label><span id="selected-count">0 đã chọn</span><label>Ngôn ngữ <input id="bulk-language" list="languages" placeholder="vi, en, fr…" maxlength="35"></label><button id="bulk-apply">Gán cho sách Drive</button><button id="bulk-delete-opds" class="danger" hidden>Xóa sách OPDS đã chọn</button></div>
 <div id="items" aria-live="polite"></div><div class="more"><button id="load-more" hidden>Tải trang tiếp</button><button id="reload-folder">Tải lại thư mục gốc</button></div></section>
 <footer>VBook Library · Metadata riêng cho từng thư viện · Nguồn sách do bạn kiểm soát</footer></main>
 <dialog id="editor"><form id="edit-form"><div class="dialog-head"><h2>Thông tin sách</h2><button class="icon-button" type="button" data-close="editor" aria-label="Đóng" title="Đóng"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><p id="edit-source" class="muted"></p><div class="editor-grid"><div><div class="cover-preview" id="cover-preview"></div><p class="muted">Bìa lấy từ URL ảnh của bạn hoặc thumbnail Drive.</p></div><div><label>Tên hiển thị<input name="title" maxlength="240"></label><label>Tác giả<input name="author" maxlength="240"></label><div class="form-grid"><label>Ngôn ngữ<input name="language" list="languages" maxlength="35" placeholder="Chưa rõ"></label><label>Thể loại<input name="category" maxlength="120"></label></div><label>Mô tả<textarea name="description" maxlength="5000" rows="4"></textarea></label><label>URL bìa HTTPS<input name="coverUrl" type="url" maxlength="2048" placeholder="https://…"></label></div></div><p class="muted">Để trống một trường để dùng dữ liệu nguồn. Chỉnh sửa chỉ áp dụng trong thư viện này, không thay đổi file Drive.</p><p id="edit-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" id="reset-book">Khôi phục dữ liệu nguồn</button><button class="primary">Lưu thông tin</button></div></form></dialog>
@@ -144,6 +144,7 @@ button:hover { background: var(--soft); }
 button:active { transform: translateY(1px); }
 button:disabled { opacity: .52; cursor: wait; transform: none; }
 .icon-button { display: inline-grid; place-items: center; width: var(--control-height); min-width: var(--control-height); padding: 0; }
+.action-button { min-height: var(--control-height); color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-control); text-decoration: none; }
 .icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .primary { background: var(--green); color: var(--paper); border-color: var(--green); font-weight: 650; }
 .primary:hover { background: var(--green-hover); border-color: var(--green-hover); }
@@ -301,6 +302,7 @@ td small { display: block; max-width: 380px; overflow-wrap: anywhere; }
 .thumb { width: 42px; height: 60px; object-fit: contain; }
 .table-title { display: flex; gap: 12px; align-items: center; }
 .table-title button { min-height: 36px; padding: 0; background: none; border: 0; text-align: left; }
+.row-actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; }
 .empty { margin: 16px 0; padding: clamp(28px, 9vw, 45px) 16px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius-panel); text-align: center; }
 .more { display: grid; gap: var(--space-2); margin: var(--space-5) 0; }
 footer { margin-top: 42px; padding: 28px 0; color: var(--muted); border-top: 1px solid var(--line); font-size: 11px; text-align: center; }
@@ -356,6 +358,26 @@ hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
   .mark { width: 32px; height: 36px; }
   nav button { padding-inline: 8px; }
   .tabs button { padding-inline: 5px; font-size: 11px; }
+}
+
+@media (max-width: 759px) {
+  .bulk { grid-template-columns: minmax(0, 1fr) auto; overflow: hidden; }
+  .bulk > label:not(.check), .bulk > button { grid-column: 1 / -1; width: 100%; }
+  .table-wrap { width: 100%; overflow: visible; }
+  table { min-width: 0; }
+  thead { display: none; }
+  tbody, tr { display: block; }
+  tr { position: relative; min-height: 92px; padding: var(--space-4) 116px var(--space-4) 54px; border-bottom: 1px solid var(--line); }
+  tr:last-child { border-bottom: 0; }
+  td { display: none; padding: 0; border: 0; }
+  td:first-child { display: block; position: absolute; top: var(--space-4); left: var(--space-4); }
+  td:nth-child(2) { display: block; min-width: 0; }
+  td:last-child { display: block; position: absolute; top: var(--space-4); right: var(--space-4); }
+  .table-title { align-items: flex-start; }
+  .table-title > div { min-width: 0; }
+  .table-title button, .table-title small { overflow-wrap: anywhere; }
+  .thumb { display: none; }
+  .row-actions { gap: 6px; }
 }
 
 @media (min-width: 760px) {

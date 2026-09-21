@@ -101,8 +101,9 @@ export async function scanOpdsSource(secret: string, libraryId: string, row: Opd
   for (const book of feed.books) {
     const acquisition = book.links.find(isAcquisition)!;
     const key = await bookKey(secret, libraryId, `opds-book:${row.id}:${book.id || acquisition.href}`);
-    const cover = resolved(book.cover, base)?.href || '';
-    books.push({ key, ref: '', name: book.title, title: book.title, opdsTitle: book.title, isFolder: false, format: formatOf(acquisition), mimeType: acquisition.type || 'application/octet-stream', size: acquisition.length, modified: safeDate(book.modified), author: book.author, language: book.language, category: book.category, description: book.description, coverUrl: cover, overrides: {}, sourceCoverUrl: cover, external: true, sourceId: row.id, sourceName: row.name });
+    const cover = resolved(book.cover, base)?.href || '', acquisitionUrl = resolved(acquisition.href, base);
+    const ref = acquisitionUrl ? await protectData(secret, `opds-download:${libraryId}:${row.id}`, { url: acquisitionUrl.href }) : '';
+    books.push({ key, ref, name: book.title, title: book.title, opdsTitle: book.title, isFolder: false, format: formatOf(acquisition), mimeType: acquisition.type || 'application/octet-stream', size: acquisition.length, modified: safeDate(book.modified), author: book.author, language: book.language, category: book.category, description: book.description, coverUrl: cover, overrides: {}, sourceCoverUrl: cover, external: true, sourceId: row.id, sourceName: row.name });
   }
   const next = resolved(feed.next, base);
   return {

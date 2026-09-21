@@ -252,7 +252,12 @@ api.post('/api/libraries/:id/scan', async c => {
     const targetToken = target === undefined ? '' : stringInput(target, 16000, 'Trang OPDS');
     const row = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE id = ? AND library_id = ? AND enabled = 1').bind(sourceId, c.get('library').id).first<OpdsSourceRow>();
     if (!row) fail(404, 'Không tìm thấy nguồn OPDS hoặc nguồn đang tắt.');
-    try { return c.json(await scanOpdsSource(c.env.MASK_SECRET, c.get('library').id, row!, targetToken)); }
+    try {
+      const data = await scanOpdsSource(c.env.MASK_SECRET, c.get('library').id, row!, targetToken);
+      const excluded = (await c.env.DB.prepare('SELECT book_key FROM opds_exclusions WHERE library_id = ? AND source_id = ?').bind(c.get('library').id, sourceId).all<{book_key:string}>()).results;
+      const hidden = new Set(excluded.map(item => item.book_key));
+      return c.json({ ...data, items: data.items.filter(item => item.isFolder || !hidden.has(item.key)) });
+    }
     catch (error) {
       if (error instanceof HTTPException) throw error;
       return fail(503, 'Không kết nối được nguồn OPDS trong lúc quét. Hãy thử lại hoặc tắt nguồn lỗi.');
@@ -261,6 +266,35 @@ api.post('/api/libraries/:id/scan', async c => {
   const folder = body.folder === undefined ? undefined : stringInput(body.folder, 16000, 'Thư mục');
   const cursor = body.cursor === undefined ? undefined : stringInput(body.cursor, 16000, 'Con trỏ');
   return c.json(await readPage(c, c.get('library'), { folder, cursor }));
+});
+api.post('/api/libraries/:id/source-books/hide', async c => {
+  const body = await jsonBody(c), lib = c.get('library');
+  if (!Array.isArray(body.books) || !body.books.length || body.books.length > 50) fail(400, 'Chọn từ 1 đến 50 sách OPDS mỗi lần.');
+  const rows: {sourceId:string;key:string}[] = [];
+  for (const raw of body.books as unknown[]) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(400, 'Danh sách sách OPDS không hợp lệ.');
+    const value = raw as Record<string, unknown>, sourceId = stringInput(value.sourceId, 80, 'Mã nguồn', true), key = stringInput(value.key, 80, 'Mã sách', true);
+    if (!/^[\w-]{43}$/.test(key)) fail(400, 'Mã sách OPDS không hợp lệ.');
+    rows.push({ sourceId, key });
+  }
+  const known = (await c.env.DB.prepare(`SELECT id FROM opds_sources WHERE library_id = ? AND id IN (${rows.map(() => '?').join(',')})`).bind(lib.id, ...rows.map(row => row.sourceId)).all<{id:string}>()).results;
+  const allowed = new Set(known.map(row => row.id));
+  if (rows.some(row => !allowed.has(row.sourceId))) fail(403, 'Nguồn OPDS không thuộc thư viện này.');
+  await c.env.DB.batch(rows.map(row => c.env.DB.prepare('INSERT OR IGNORE INTO opds_exclusions (library_id, source_id, book_key, created_at) VALUES (?, ?, ?, ?)').bind(lib.id, row.sourceId, row.key, Date.now())));
+  return c.json({ success: true, count: rows.length });
+});
+api.get('/api/libraries/:id/sources/:sourceId/download', async c => {
+  const lib = c.get('library'), sourceId = stringInput(c.req.param('sourceId'), 80, 'Mã nguồn', true);
+  const row = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE id = ? AND library_id = ? AND enabled = 1').bind(sourceId, lib.id).first<OpdsSourceRow>();
+  if (!row) fail(404, 'Không tìm thấy nguồn OPDS hoặc nguồn đang tắt.');
+  const value = await revealData<{url:string}>(c.env.MASK_SECRET, `opds-download:${lib.id}:${row!.id}`, c.req.query('ref') || '');
+  const target = safeOpdsUrl(String(value.url || '')), config = await sourceConfig(c.env.MASK_SECRET, row!);
+  if (target.origin !== safeOpdsUrl(config.url).origin) return c.redirect(target.href, 302);
+  let response: Response;
+  try { response = await fetchOpds(config, target); } catch { return fail(503, 'Không tải được sách từ nguồn OPDS.'); }
+  const headers = new Headers({ 'Content-Type': response.headers.get('content-type') || 'application/octet-stream', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+  for (const name of ['content-disposition','content-length','etag','last-modified']) { const value = response.headers.get(name); if (value) headers.set(name, value); }
+  return new Response(response.body, { status: response.status, headers });
 });
 async function editableKey(c: C, ref: unknown): Promise<string> {
   const lib = c.get('library');
@@ -279,6 +313,12 @@ api.delete('/api/libraries/:id/books/:key', async c => {
   if (key !== c.req.param('key')) fail(403, 'Tham chiếu không khớp sách.');
   await c.env.DB.prepare('DELETE FROM book_overrides WHERE library_id = ? AND book_key = ?').bind(c.get('library').id, key).run();
   return c.json({ overrides: {} });
+});
+api.get('/api/libraries/:id/books/:key/download', async c => {
+  const key = await editableKey(c, c.req.query('ref'));
+  if (key !== c.req.param('key')) fail(403, 'Tham chiếu không khớp sách.');
+  const item = await unseal(c.env.MASK_SECRET, c.req.query('ref') || '', c.get('library').id, 'book');
+  return c.redirect(`https://drive.google.com/uc?export=download&id=${item.id}&confirm=t`, 302);
 });
 api.post('/api/libraries/:id/language', async c => {
   const body = await jsonBody(c), lib = c.get('library');
@@ -405,7 +445,10 @@ api.get('/o/:shortId/s/:sourceShortId', async c => {
     const body = new TextDecoder().decode(bytes);
     let rewritten = body;
     if (upstream.ok) {
-      try { rewritten = await rewriteOpdsBody(c.env.MASK_SECRET, lib.short_id, row, new URL(upstream.url || target.href), body, contentType); }
+      try {
+        const exclusions = (await c.env.DB.prepare('SELECT book_key FROM opds_exclusions WHERE library_id = ? AND source_id = ?').bind(lib.id, row.id).all<{book_key:string}>()).results;
+        rewritten = await rewriteOpdsBody(c.env.MASK_SECRET, lib.short_id, row, new URL(upstream.url || target.href), body, contentType, new Set(exclusions.map(item => item.book_key)));
+      }
       catch { fail(503, 'Không đọc được dữ liệu từ nguồn OPDS.'); }
     }
     return new Response(rewritten, { status: upstream.status, headers: { 'Content-Type': contentType, 'Cache-Control': 'private, no-store', Vary: 'Authorization' } });

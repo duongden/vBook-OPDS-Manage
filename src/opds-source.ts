@@ -1,4 +1,4 @@
-import { fail, protectData, revealData } from './library-security';
+import { bookKey, fail, protectData, revealData } from './library-security';
 
 export interface OpdsSourceConfig extends Record<string, unknown> {
   url: string;
@@ -106,10 +106,32 @@ export async function proxyHref(secret: string, libraryShortId: string, row: Opd
   return `/o/${libraryShortId}/s/${row.short_id}?target=${encodeURIComponent(token)}`;
 }
 
-export async function rewriteOpdsBody(secret: string, libraryShortId: string, row: OpdsSourceRow, base: URL, body: string, contentType: string): Promise<string> {
+const attr = (tag: string, name: string): string => xmlUnescape(tag.match(new RegExp(`\\b${name}=(['"])(.*?)\\1`, 'i'))?.[2] || '');
+const xmlBookIdentity = (entry: string): string => {
+  const id = xmlUnescape(entry.match(/<(?:[\w-]+:)?id(?:\s[^>]*)?>([\s\S]*?)<\/(?:[\w-]+:)?id>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() || '');
+  const link = [...entry.matchAll(/<(?:[\w-]+:)?link\b[^>]*>/gi)].find(match => /acquisition/i.test(attr(match[0], 'rel')));
+  return id || (link ? attr(link[0], 'href') : '');
+};
+const jsonBookIdentity = (publication: Record<string, any>): string => {
+  const acquisition = (Array.isArray(publication.links) ? publication.links : []).find((link: any) => String(Array.isArray(link?.rel) ? link.rel.join(' ') : link?.rel || '').includes('acquisition'));
+  return String(publication.metadata?.identifier || acquisition?.href || publication.metadata?.title || '');
+};
+
+export async function rewriteOpdsBody(secret: string, libraryShortId: string, row: OpdsSourceRow, base: URL, body: string, contentType: string, excluded = new Set<string>()): Promise<string> {
   const root = safeOpdsUrl((await sourceConfig(secret, row)).url);
   if (contentType.includes('json') || body.trimStart().startsWith('{')) {
     const data = JSON.parse(body);
+    const filterPublications = async (holder: Record<string, any>) => {
+      if (!Array.isArray(holder.publications) || !excluded.size) return;
+      const kept = [];
+      for (const publication of holder.publications) {
+        const key = await bookKey(secret, row.library_id, `opds-book:${row.id}:${jsonBookIdentity(publication)}`);
+        if (!excluded.has(key)) kept.push(publication);
+      }
+      holder.publications = kept;
+    };
+    await filterPublications(data);
+    if (Array.isArray(data.groups)) for (const group of data.groups) if (group && typeof group === 'object') await filterPublications(group);
     const visit = async (value: unknown): Promise<void> => {
       if (!value || typeof value !== 'object') return;
       for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
@@ -118,6 +140,18 @@ export async function rewriteOpdsBody(secret: string, libraryShortId: string, ro
       }
     };
     await visit(data); return JSON.stringify(data);
+  }
+  if (excluded.size) {
+    const entries = [...body.matchAll(/<(?:[\w-]+:)?entry\b[^>]*>[\s\S]*?<\/(?:[\w-]+:)?entry>/gi)];
+    let filtered = '', entryOffset = 0;
+    for (const match of entries) {
+      filtered += body.slice(entryOffset, match.index);
+      const identity = xmlBookIdentity(match[0]);
+      const key = identity ? await bookKey(secret, row.library_id, `opds-book:${row.id}:${identity}`) : '';
+      if (!key || !excluded.has(key)) filtered += match[0];
+      entryOffset = match.index! + match[0].length;
+    }
+    body = filtered + body.slice(entryOffset);
   }
   const matches = [...body.matchAll(/\b(href|src)=(['"])(.*?)\2/gi)];
   if (!matches.length) return body;

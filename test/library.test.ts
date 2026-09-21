@@ -101,6 +101,7 @@ test('managed UI is available without DB; legacy endpoints remain separate; JS p
   assert.match(libraryCss,/\.view-toggle \{[^}]*height: var\(--control-height\)/s);
   assert.match(libraryCss,/\.shelf-head nav \{[^}]*justify-content: flex-start/s);
   assert.match(libraryCss,/\.source-credentials label \{[^}]*justify-content: flex-end/s);
+  assert.match(libraryCss,/@media \(max-width: 759px\)[\s\S]*td:last-child \{[^}]*position: absolute/s);
   const uiDocument=new JSDOM(libraryHtml).window.document;
   for(const button of uiDocument.querySelectorAll('.icon-button')) assert.ok(button.getAttribute('aria-label'));
   new Script(libraryClient);
@@ -177,8 +178,12 @@ test('external OPDS sources aggregate behind short authenticated proxy links', a
 
   const scanned=await h.req(base(a)+'/scan','POST',{sourceId:source.id});assert.equal(scanned.status,200);const scan=await scanned.json() as any;
   const scannedBook=scan.items.find((item:any)=>!item.isFolder),scannedFolder=scan.items.find((item:any)=>item.isFolder);
-  assert.equal(scannedBook.title,'Sách mẫu');assert.equal(scannedBook.format,'EPUB');assert.equal(scannedBook.external,true);assert.equal(scannedBook.sourceName,'Kho sách được chia sẻ');
+  assert.equal(scannedBook.title,'Sách mẫu');assert.equal(scannedBook.format,'EPUB');assert.equal(scannedBook.external,true);assert.equal(scannedBook.sourceName,'Kho sách được chia sẻ');assert.ok(scannedBook.ref);
   assert.equal(scan.nextCursor,null);assert.ok(scannedFolder.ref);const child=await h.req(base(a)+'/scan','POST',{sourceId:source.id,target:scannedFolder.ref});assert.equal(child.status,200);const childData=await child.json() as any;assert.equal(childData.items.some((item:any)=>item.title==='Sách mẫu'),true);assert.equal(childData.nextCursor,null);assert.equal(childData.folderKey,scannedFolder.key);assert.equal(childData.items.find((item:any)=>item.isFolder).key,scannedFolder.key);
+  const managedDownload=await h.req(base(a)+'/sources/'+source.id+'/download?ref='+encodeURIComponent(scannedBook.ref));assert.equal(managedDownload.status,200);assert.equal(await managedDownload.text(),'fake-epub');
+  assert.equal((await h.req(base(a)+'/source-books/hide','POST',{books:[{sourceId:source.id,key:scannedBook.key}]})).status,200);
+  const hiddenScan=await(await h.req(base(a)+'/scan','POST',{sourceId:source.id})).json() as any;assert.equal(hiddenScan.items.some((item:any)=>item.title==='Sách mẫu'),false);assert.equal(hiddenScan.items.some((item:any)=>item.isFolder),true);
+  const hiddenProxy=await h.req(new URL(source.url).pathname,'GET',undefined,auth(a));assert.equal(hiddenProxy.status,200);assert.ok(!(await hiddenProxy.text()).includes('Sách mẫu'));
 
   let changed=await h.req(base(a)+'/sources/'+source.id,'PATCH',{enabled:false});assert.equal(changed.status,200);
   assert.equal((await changed.json() as any).sources[0].enabled,false);
@@ -317,6 +322,9 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     holdScan=true;click('#scan-start');await wait(()=>scanStarted);click('#scan-pause');holdScan=false;click('#scan-resume');
     await wait(()=>d.querySelector('#scan-status')!.textContent!.startsWith('Hoàn tất'));
     assert.match(d.querySelector('#scan-status')!.textContent!,/7 file sách/);assert.ok(d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#items')!.textContent!.includes('OPDS'));
+    const externalDelete=d.querySelector('[data-book-delete]') as HTMLButtonElement,externalDownload=d.querySelector('a[href*="/sources/"][href*="/download?ref="]');assert.ok(externalDelete);assert.ok(externalDownload);
+    click('#select-all');assert.equal(d.querySelector('#selected-count')!.textContent,'7 đã chọn');assert.equal((d.querySelector('#bulk-apply') as HTMLButtonElement).disabled,false);assert.equal((d.querySelector('#bulk-delete-opds') as HTMLButtonElement).hidden,false);
+    (d.querySelector('[data-book-delete]') as HTMLButtonElement).click();await wait(()=>!d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#notice')!.textContent!.includes('Đã loại sách'));
     click('#logout');await wait(()=>!(d.querySelector('#welcome') as HTMLElement).hidden);
     assert.equal(d.querySelector('#secret-values')!.textContent,'');assert.equal(d.querySelectorAll('#items .book').length,0);
     assert.deepEqual(errors,[]);
