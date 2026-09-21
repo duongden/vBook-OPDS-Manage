@@ -193,3 +193,9 @@ Sau deploy, dùng một thư mục Drive thử để kiểm tra tạo thư việ
 | HTML/CSS và tương tác UI | `src/library-ui.ts`, `src/library-client.ts` |
 | Đọc metadata Google Drive | `src/drive.ts` |
 | Schema D1 | `migrations/` (apply every file in order) |
+
+## Giấy phép
+
+Mã nguồn được phát hành theo [MIT License](LICENSE). Bạn có thể sử dụng, sao chép, sửa đổi và phân phối theo các điều khoản trong file giấy phép.
+
+Giấy phép này chỉ áp dụng cho mã nguồn của project, không cấp quyền đối với sách, ảnh bìa hoặc dữ liệu được người dùng kết nối từ Google Drive.
