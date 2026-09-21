@@ -93,6 +93,8 @@ test('managed UI is available without DB; legacy endpoints remain separate; JS p
   assert.match(libraryCss,/--control-height: 44px/);
   assert.match(libraryCss,/\.view-toggle \{[^}]*height: var\(--control-height\)/s);
   assert.match(libraryCss,/\.shelf-head nav \{[^}]*justify-content: flex-start/s);
+  const uiDocument=new JSDOM(libraryHtml).window.document;
+  for(const button of uiDocument.querySelectorAll('.icon-button')) assert.ok(button.getAttribute('aria-label'));
   new Script(libraryClient);
 });
 test('creation uses encrypted source and hashes; session CSRF, Origin and account boundaries enforced', async()=>{

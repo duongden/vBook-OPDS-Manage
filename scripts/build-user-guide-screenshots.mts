@@ -48,8 +48,8 @@ function dashboard(theme: 'light' | 'dark', zoom = true): string {
   return html
     .replace('<section id="welcome">', '<section id="welcome" hidden>')
     .replace('<section id="dashboard" hidden>', '<section id="dashboard">')
-    .replace('id="account-button" hidden', 'id="account-button"')
-    .replace('id="logout" hidden', 'id="logout"')
+    .replace('title="Tài khoản" hidden', 'title="Tài khoản"')
+    .replace('title="Đăng xuất" hidden', 'title="Đăng xuất"')
     .replace('<h1 id="library-name">Thư viện</h1>', '<h1 id="library-name">Góc sách mẫu</h1>')
     .replace('<div id="stats" class="stats" aria-live="polite"></div>', '<div id="stats" class="stats" aria-live="polite"><div class="stat"><strong>12</strong><span>File sách đã tải</span></div><div class="stat"><strong>4</strong><span>Định dạng</span></div><div class="stat"><strong>3</strong><span>Chưa có ngôn ngữ</span></div><div class="stat"><strong>2</strong><span>Chưa có nguồn bìa</span></div></div>')
     .replace('<p id="formats" class="muted"></p>', '<p id="formats" class="muted">EPUB: 5 · PDF: 4 · CBZ: 2 · MOBI: 1</p>')
