@@ -240,7 +240,7 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
   const click=(id:string)=>(d.querySelector(id) as HTMLButtonElement).click();
   try {
     w.eval(libraryClient);
-    assert.equal(d.documentElement.dataset.theme,'light');click('#theme-toggle');assert.equal(d.documentElement.dataset.theme,'dark');assert.equal(d.querySelector('#theme-toggle')!.getAttribute('aria-pressed'),'true');
+    assert.equal(d.documentElement.dataset.theme,'light');assert.equal(d.querySelector('#theme-toggle')!.textContent,'☾');click('#theme-toggle');assert.equal(d.documentElement.dataset.theme,'dark');assert.equal(d.querySelector('#theme-toggle')!.textContent,'☀');assert.equal(d.querySelector('#theme-toggle')!.getAttribute('aria-pressed'),'true');
     field('#create','drive',ROOT);field('#create','name','Thư viện UI');field('#create','username','owner');field('#create','password','ui-password-12345');submit('#create');
     await wait(()=>d.querySelectorAll('.book').length===3&&d.querySelector('#connection')!.hasAttribute('open'));
     assert.ok(d.querySelector('#secret-values')!.textContent!.includes('reader'));

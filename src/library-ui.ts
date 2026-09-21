@@ -1,6 +1,6 @@
 export const libraryHtml = String.raw`<!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="light dark"><title>VBook Library — Thư viện của bạn</title><link rel="stylesheet" href="/assets/library.css"><script src="/assets/library.js" defer></script></head>
-<body><header><div class="wrap header"><a href="/" class="brand"><span class="mark">V</span><span>VBook Library<small>DRIVE TO OPDS · READING ROOM</small></span></a><nav aria-label="Điều hướng"><a href="/legacy">Tạo link nhanh</a><button id="theme-toggle" type="button" aria-label="Chuyển sang giao diện tối" aria-pressed="false">☾ Tối</button><button id="account-button" hidden>Tài khoản</button><button id="logout" hidden>Đăng xuất</button></nav></div></header>
+<body><header><div class="wrap header"><a href="/" class="brand"><span class="mark">V</span><span>VBook Library<small>DRIVE TO OPDS · READING ROOM</small></span></a><nav aria-label="Điều hướng"><a href="/legacy">Tạo link nhanh</a><button id="theme-toggle" type="button" aria-label="Chuyển sang giao diện tối" aria-pressed="false">☾</button><button id="account-button" hidden>Tài khoản</button><button id="logout" hidden>Đăng xuất</button></nav></div></header>
 <main class="wrap"><div id="notice" role="status" aria-live="polite" hidden></div>
 <section id="welcome"><div class="hero"><div><p class="eyebrow">KHO SÁCH TRÊN DRIVE CỦA BẠN</p><h1>Một góc nhìn mới<br>cho <em>thư viện riêng.</em></h1><p class="intro">Kiểm tra kho sách, bổ sung thông tin và bìa.<br>Đọc theo cách bạn thích — trên vBook qua OPDS.</p><div class="tags"><span>EPUB</span><span>CBZ</span><span>PDF</span><span>MOBI</span><span>CBR</span><span>TXT</span></div></div><div class="intro-note"><span class="eyebrow">SÁCH VẪN Ở TRÊN DRIVE</span><h2>Bạn giữ sách.<br>Chúng tôi nối thư viện.</h2><p>Không lưu nội dung sách, không ghi vào Drive. Chỉ lưu tài khoản, thông tin quản lý và các chỉnh sửa của bạn.</p></div></div>
 <div class="entry-panel"><div class="tabs" role="group" aria-label="Truy cập thư viện"><button data-tab="create" class="active">Tạo thư viện</button><button data-tab="login">Đăng nhập</button><button data-tab="recovery">Khôi phục</button></div>
@@ -146,7 +146,7 @@ header {
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(14px);
 }
-.header { display: grid; gap: 10px; padding-block: 13px; }
+.header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding-block: 10px; }
 .brand { display: flex; gap: 10px; align-items: center; width: fit-content; text-decoration: none; font: 21px var(--serif); }
 .brand small { display: block; font: 7px/1.8 sans-serif; letter-spacing: 1.4px; color: var(--muted); }
 .mark {
@@ -159,21 +159,22 @@ header {
   background: var(--green);
   border-radius: 6px;
 }
-nav { display: flex; gap: 7px; align-items: center; overflow-x: auto; scrollbar-width: none; }
+nav { display: flex; gap: 6px; align-items: center; justify-content: flex-end; overflow-x: auto; scrollbar-width: none; }
 nav::-webkit-scrollbar { display: none; }
 nav a { flex: 0 0 auto; padding: 8px 2px; font-size: 12px; }
 nav button { flex: 0 0 auto; min-height: 38px; padding: 7px 10px; font-size: 12px; }
+#theme-toggle { width: 38px; min-width: 38px; padding: 0; font-size: 19px; line-height: 1; }
 
-.hero { display: grid; gap: 24px; padding: 34px 0 28px; }
+.hero { display: grid; gap: 18px; padding: clamp(22px, 7vw, 34px) 0 22px; }
 .eyebrow { margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 1.8px; }
-h1 { margin: 12px 0; font: normal clamp(34px, 11vw, 58px)/1.12 var(--serif); letter-spacing: -1.2px; }
+h1 { margin: 9px 0; font: normal clamp(31px, 10vw, 58px)/1.1 var(--serif); letter-spacing: -1.2px; }
 h1 em { color: color-mix(in srgb, var(--green) 72%, var(--muted)); font-weight: 400; }
 h2 { margin: 0 0 16px; font: normal 25px/1.3 var(--serif); }
 h3 { font-size: 18px; }
 .intro, .muted, small { color: var(--muted); }
-.intro { margin-bottom: 22px; }
+.intro { margin: 0 0 17px; }
 .intro-note {
-  padding: 22px;
+  padding: clamp(16px, 5vw, 22px);
   background: var(--soft);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -187,21 +188,21 @@ h3 { font-size: 18px; }
   width: 100%;
   max-width: 720px;
   margin: 0 auto 36px;
-  padding: 18px;
+  padding: clamp(14px, 4vw, 20px);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow: var(--shadow);
 }
-.tabs { display: grid; grid-template-columns: 1fr; gap: 7px; margin-bottom: 24px; }
+.tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-bottom: 18px; }
 .tabs button { width: 100%; }
 .tabs .active, .view-toggle [aria-pressed='true'] { background: var(--green); color: var(--paper); border-color: var(--green); }
-label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; font-size: 13px; font-weight: 600; }
+label { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; font-size: 12px; font-weight: 600; }
 input, select, textarea {
   width: 100%;
   min-width: 0;
-  min-height: 46px;
-  padding: 10px 12px;
+  min-height: 42px;
+  padding: 8px 11px;
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -211,28 +212,32 @@ input[type='checkbox'] { width: 19px; min-height: 19px; height: 19px; accent-col
 input[readonly] { background: var(--soft); }
 .form-grid { display: grid; gap: 0; }
 
-.section-head { display: grid; gap: 16px; padding: 28px 0 18px; }
+.section-head { display: grid; gap: 12px; padding: 22px 0 14px; }
 .section-head h1 { margin-block: 8px; font-size: clamp(30px, 9vw, 42px); overflow-wrap: anywhere; }
 .section-head .primary { width: 100%; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; overflow: hidden; background: var(--line); border: 1px solid var(--line); border-radius: 12px; }
-.stat { min-width: 0; padding: 15px 12px; background: var(--surface); }
-.stat strong { display: block; font: 28px var(--serif); }
+.stat { min-width: 0; padding: 11px 10px; background: var(--surface); }
+.stat strong { display: block; font: 25px var(--serif); }
 .stat span { color: var(--muted); font-size: 11px; }
-.scanbar { padding: 15px 0 18px; border-bottom: 1px solid var(--line); }
-.scanbar > div { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.scanbar { padding: 12px 0 14px; border-bottom: 1px solid var(--line); }
+.scanbar > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.scanbar button { width: 100%; padding-inline: 8px; }
 .scanbar p { margin-bottom: 0; font-size: 13px; }
-.tools { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 22px 0 18px; }
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 18px 0 14px; }
 .tools label { margin: 0; }
+.tools .search, .tools .view-toggle { grid-column: 1 / -1; }
 .view-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .shelf-head { display: grid; gap: 9px; margin: 18px 0; }
 .shelf-head nav { flex-wrap: wrap; overflow: visible; }
 .shelf-head button { min-height: 38px; font-size: 12px; }
-.bulk { display: grid; gap: 10px; padding: 14px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; font-size: 12px; }
+.bulk { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 10px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; font-size: 12px; }
 .bulk label { margin: 0; }
-.bulk > label:not(.check) { display: grid; grid-template-columns: auto 1fr; align-items: center; }
+.bulk > label:not(.check) { grid-column: 1; }
+.bulk > button { grid-column: 2; align-self: end; }
+#selected-count { justify-self: end; }
 .check { display: flex !important; flex-direction: row !important; align-items: center; font-weight: 400; }
 
-.books { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 14px; margin: 24px 0; }
+.books { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(135px, 43vw), 1fr)); gap: 20px 12px; margin: 20px 0; }
 .book { min-width: 0; position: relative; }
 .book .check { min-height: 28px; margin-bottom: 6px; font-size: 11px; }
 .book-open { width: 100%; min-height: 0; padding: 0; border: 0; background: none; text-align: left; }
@@ -266,7 +271,7 @@ td small { display: block; max-width: 380px; overflow-wrap: anywhere; }
 .thumb { width: 42px; height: 60px; object-fit: contain; }
 .table-title { display: flex; gap: 12px; align-items: center; }
 .table-title button { min-height: 36px; padding: 0; background: none; border: 0; text-align: left; }
-.empty { margin: 18px 0; padding: 45px 18px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; text-align: center; }
+.empty { margin: 16px 0; padding: clamp(28px, 9vw, 45px) 16px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; text-align: center; }
 .more { display: grid; gap: 9px; margin: 24px 0; }
 footer { margin-top: 42px; padding: 28px 0; color: var(--muted); border-top: 1px solid var(--line); font-size: 11px; text-align: center; }
 
@@ -277,7 +282,7 @@ dialog {
   max-width: none;
   max-height: 92dvh;
   margin: auto 0 0;
-  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
   overflow: auto;
   color: var(--ink);
   background: var(--paper);
@@ -301,15 +306,17 @@ hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
 
 @media (min-width: 480px) {
   .wrap { padding-inline: 22px; }
-  .header { grid-template-columns: auto 1fr; align-items: center; }
-  .header nav { justify-content: flex-end; }
-  .tabs { grid-template-columns: repeat(3, 1fr); }
   .scanbar > div { display: flex; flex-wrap: wrap; }
-  .tools { grid-template-columns: 1fr 1fr; }
-  .tools .search, .tools .view-toggle { grid-column: 1 / -1; }
-  .bulk { grid-template-columns: auto 1fr; align-items: center; }
-  .bulk > label:not(.check), .bulk > button { grid-column: 1 / -1; }
+  .scanbar button { width: auto; }
   .more { grid-template-columns: repeat(2, auto); justify-content: center; }
+}
+
+@media (max-width: 359px) {
+  .brand { font-size: 18px; }
+  .brand small { display: none; }
+  .mark { width: 32px; height: 36px; }
+  nav button { padding-inline: 8px; }
+  .tabs button { padding-inline: 5px; font-size: 11px; }
 }
 
 @media (min-width: 760px) {
