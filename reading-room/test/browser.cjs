@@ -2,7 +2,8 @@ const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage','--no-zygote']});
- const page=await browser.newPage({viewport:{width:1440,height:1100}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const context=await browser.newContext({viewport:{width:1440,height:1100},httpCredentials:{username:process.env.OPDS_USERNAME||'reader',password:process.env.OPDS_PASSWORD||'test-only-password'}});
+ const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:4173/');await page.locator('.book').first().waitFor();assert.equal(await page.locator('.book').count(),8);
  await page.screenshot({animations:'disabled',path:'.test-output/desktop.png',fullPage:true});
  await page.getByLabel('Search books').fill('Cartographer');assert.equal(await page.locator('.book').count(),1);

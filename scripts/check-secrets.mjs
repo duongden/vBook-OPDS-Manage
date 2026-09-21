@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 
 const files = execFileSync('git', ['ls-files', '-z'], {encoding:'utf8'}).split('\0').filter(Boolean);
-const forbidden = /(^|\/)(node_modules|\.wrangler|\.openai|dist)(\/|$)|(^|\/)\.(env|dev\.vars)(?!\.example$)(\.|$)|\.(pem|key|p12|sqlite3?|db|apk|dex)$/i;
+const forbidden = /(^|\/)(node_modules|\.wrangler|\.openai|dist)(\/|$)|(^|\/)wrangler\.production\.toml$|(^|\/)\.(env|dev\.vars)(?!\.example$)(\.|$)|\.(pem|key|p12|sqlite3?|db|apk|dex)$/i;
 const patterns = [
   ['private key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],
   ['Google API key', /AIza[0-9A-Za-z_-]{35}/],
@@ -31,6 +31,12 @@ for (const path of files) {
   }
   if (localValues.some(value => content.includes(value))) {
     console.error(`Local secret value present: ${path}`); failures++;
+  }
+  if (/wrangler(?:\.production)?\.toml(?:\.example)?$/.test(path)) {
+    const id = content.match(/database_id\s*=\s*"([^"]+)"/)?.[1];
+    if (id && id !== '00000000-0000-0000-0000-000000000001' && id !== 'replace-with-your-d1-database-id') {
+      console.error(`Production D1 identifier present: ${path}`); failures++;
+    }
   }
 }
 if (failures) process.exitCode = 1;

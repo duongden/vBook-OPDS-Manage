@@ -77,7 +77,7 @@ Feed tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi s�
 
 ## Triển khai
 
-Xem [hướng dẫn triển khai](docs/deployment.md). Production cần D1 thật, migration và secrets trên Worker. Sites riêng tư của `reading-room/` dùng đăng nhập ChatGPT, không phù hợp làm endpoint OPDS cho vBook.
+Xem [hướng dẫn triển khai](docs/deployment.md). Production cần D1, migrations và Worker secrets. `reading-room/` chỉ là mã tham chiếu, không phải endpoint của ứng dụng chính.
 
 ## Tương thích bản cũ
 

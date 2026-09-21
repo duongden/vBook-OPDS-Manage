@@ -6,18 +6,11 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "vbook-library"
-database_id = "f32d4e5f-1695-4f3e-8e67-94ee394708f7"
+# Local placeholder. Keep the production ID in the ignored
+# wrangler.production.toml file described in docs/deployment.md.
+database_id = "00000000-0000-0000-0000-000000000001"
 migrations_dir = "migrations"
 
 [vars]
-# Cấu hình biến môi trường không nhạy cảm
 DEFAULT_PAGE_SIZE = "50"
-
-# [LƯU Ý BẢO MẬT & SECRETS - KHÔNG LƯU TRỰC TIẾP VÀO FILE NÀY]:
-# Các biến nhạy cảm sau đây KHUYÊN DÙNG nạp qua lệnh terminal bí mật của Cloudflare:
-#
-# 1. Google Drive API Key:
-#    pnpm wrangler secret put GOOGLE_API_KEY
-#
-# 2. Khóa bí mật mã hóa URL ẩn danh (AES-256-GCM Privacy Shield):
-#    pnpm wrangler secret put MASK_SECRET
+# Store GOOGLE_API_KEY and MASK_SECRET as Worker secrets, never in this file.

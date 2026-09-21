@@ -7,7 +7,7 @@ import { get } from 'node:http';
 test('loopback preview rejects foreign Host headers', {timeout: 15000}, async () => {
   const child = spawn(process.execPath, ['server.mjs'], {
     cwd: new URL('../', import.meta.url),
-    env: {...process.env, PORT:'0', LOCAL_PREVIEW:'1', AUTH_MODE:'platform'},
+    env: {...process.env, PORT:'0', LOCAL_PREVIEW:'1', OPDS_USERNAME:'reader', OPDS_PASSWORD:'test-only-password'},
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   try {
@@ -20,7 +20,7 @@ test('loopback preview rejects foreign Host headers', {timeout: 15000}, async ()
       });
     });
     const url = `http://127.0.0.1:${port}/`;
-    assert.equal((await fetch(url)).status, 200);
+    assert.equal((await fetch(url,{headers:{Authorization:'Basic '+btoa('reader:test-only-password')}})).status, 200);
     const status = await new Promise((resolve, reject) => {
       get(url, {headers:{Host:'attacker.example'}}, response => {
         response.resume(); resolve(response.statusCode);

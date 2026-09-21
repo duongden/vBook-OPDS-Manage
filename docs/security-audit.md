@@ -15,7 +15,7 @@ Scope: all application source under `src/`, D1 migrations, client rendering, leg
 | Low | Legacy Drive parsing accepted folder-shaped input from unrelated hosts; provider exceptions could reach logs. | Require HTTPS `drive.google.com` or a bounded raw ID; reject embedded credentials. Legacy provider errors are logged without raw exception details. |
 | Low | Loopback Reading Room preview trusted arbitrary Host headers while bypassing login. | Preview accepts only loopback hostnames and rejects foreign Host values; production Basic mode remains separate. |
 
-Also changed rate-limit identifiers to keyed HMACs instead of unkeyed IP hashes. Git exclusions cover local secrets, databases, generated builds and private Sites project identity. CI actions are pinned to commit hashes and receive read-only repository permissions.
+Also changed rate-limit identifiers to keyed HMACs instead of unkeyed IP hashes. Git exclusions cover local secrets, production infrastructure identifiers, databases and generated builds. CI actions are pinned to commit hashes and receive read-only repository permissions.
 
 ## Checks
 
@@ -35,7 +35,6 @@ Also changed rate-limit identifiers to keyed HMACs instead of unkeyed IP hashes.
 - `MASK_SECRET` protects source tokens, metadata keys and password peppers. Losing/rotating it currently requires a planned data migration; there is no automated key rotation. A compromise of both D1 and this secret defeats the pepper's additional protection.
 - PBKDF2-SHA256 remains below the [OWASP 600,000-iteration recommendation](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), because of the [workerd iteration cap](https://github.com/cloudflare/workerd/issues/1346). Benchmark CPU on the actual plan; evaluate a supported stronger KDF or identity provider before a larger public rollout.
 - External cover URLs are fetched by the user's browser/reader; the image host sees the user's connection. Backend code does not fetch arbitrary cover URLs.
-- The sample's `AUTH_MODE=platform` requires an actual external authentication gate. Do not deploy that mode publicly without its gate.
 - Dependency auditing and pattern-based secret scanning cannot establish the absence of all vulnerabilities or secrets.
 
 ## Upgrade

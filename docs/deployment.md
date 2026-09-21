@@ -14,15 +14,17 @@ pnpm exec wrangler login
 pnpm exec wrangler d1 create vbook-library
 ```
 
-Thay `database_id` giả trong `wrangler.toml` bằng ID vừa tạo. Binding giữ tên `DB`.
+Tạo cấu hình production cục bộ và thay placeholder bằng ID vừa tạo:
 
 ```sh
-pnpm exec wrangler d1 migrations apply DB --remote
-pnpm exec wrangler secret put GOOGLE_API_KEY
-pnpm exec wrangler secret put MASK_SECRET
+cp wrangler.production.toml.example wrangler.production.toml
+# Sửa replace-with-your-d1-database-id trong wrangler.production.toml.
+pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.production.toml
+pnpm exec wrangler secret put GOOGLE_API_KEY --config wrangler.production.toml
+pnpm exec wrangler secret put MASK_SECRET --config wrangler.production.toml
 ```
 
-Không đặt secrets trong `wrangler.toml`, source, URL feed hoặc ảnh chụp chia sẻ. Chỉ dùng `.dev.vars` cho local.
+`wrangler.production.toml` bị Git bỏ qua để ID hạ tầng không xuất hiện trong repository. Không đặt secrets trong file cấu hình, source, URL feed hoặc ảnh chụp. Chỉ dùng `.dev.vars` cho local.
 
 ## Kiểm tra và phát hành
 
@@ -31,7 +33,7 @@ pnpm run precommit
 pnpm run bundle
 pnpm run test:runtime
 # Chỉ sau khi đã sẵn sàng xuất bản:
-pnpm deploy
+pnpm run deploy
 ```
 
 Wrangler dùng Worker `vbook-opds`; deploy thay phiên bản hiện tại của Worker này. Nếu cần staging, dùng cấu hình/Worker/D1 riêng; không dùng dữ liệu production để thử xóa/khôi phục tài khoản.
@@ -55,10 +57,6 @@ Không tuyên bố kiểm thử vBook thật nếu chỉ chạy test giả lập
 - Quét kho lớn chạy từng request do trang điều phối, phụ thuộc quota và bộ nhớ trình duyệt; không có job nền.
 - Phiên hết hạn sau 7 ngày, được dọn khi tạo phiên. Bucket giới hạn đăng nhập hết hạn sau 15 phút, được dọn khi kiểm tra giới hạn.
 
-## Sites
-
-Giữ nguyên `.openai/hosting.json` của `reading-room/`. Không dùng bản Sites riêng tư yêu cầu ChatGPT sign-in làm endpoint production cho vBook. Preview Sites, nếu cần, là bản riêng; không thay quyền hoặc project identity cũ.
-
 ## Security update v1.5.1
 
-Apply migration 0002 before deploying. It adds credential versions and preserves existing data. Browser sessions must sign in again. Password hashes now use a server-side HMAC pepper; existing hashes upgrade after login. Keep `MASK_SECRET` backed up and stable. Do not roll back to the old vulnerable authentication implementation. Legacy endpoints default to disabled; `?auth=` links are retired. See [security review](security-audit.md).
+Áp dụng mọi migration trước khi deploy. Giữ `MASK_SECRET` ổn định và sao lưu an toàn. Legacy endpoints mặc định bị tắt; link `?auth=` cũ không còn được hỗ trợ. Xem [báo cáo bảo mật](security-audit.md).

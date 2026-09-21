@@ -31,7 +31,6 @@ Máy chủ chạy ở cổng 4173 mặc định. Có thể thêm `PORT=8080` tr�
 - `dist/index.js`: bản build sẵn, chạy trên Worker.
 - `server.mjs`: chạy backend bằng Node.js.
 - `wrangler.jsonc`: cấu hình Cloudflare Worker.
-- `.openai/hosting.json`: ID của website Sites gốc, không phải thông tin đăng nhập.
 - `test/`: các bài kiểm tra backend, XML/EPUB và giao diện.
 
 Sửa các file trong `src/`, sau đó chạy lại `npm run build` và khởi động lại server.
@@ -50,8 +49,4 @@ Bài kiểm tra giao diện `test/browser.cjs` cần Playwright và Chromium; n�
 
 Chưa có kết nối Google Drive, database D1, nhập EPUB thật, trang quản trị hoặc bản triển khai Pages.dev. Những phần đó mới được thảo luận, không nằm trong source hiện tại.
 
-Bản Sites đã triển khai dùng lớp đăng nhập ChatGPT của hosting. Khi tự triển khai, dùng chế độ mặc định `basic` với `OPDS_USERNAME` và `OPDS_PASSWORD`. Không đặt `AUTH_MODE=platform` trên một host không có lớp kiểm soát truy cập riêng.
-
 Xem `README.md` để biết thêm chi tiết kỹ thuật.
-
-Source commit: d20b87a7e98f346aed7f8ee90f014bc3ca02011c

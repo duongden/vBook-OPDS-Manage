@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "wrangler dev --remote=false --show-interactive-dev-session=false",
     "predeploy": "pnpm run build && pnpm run test",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --config wrangler.production.toml",
     "build": "tsc --noEmit",
     "test": "tsx test/opds.test.ts && tsx --test test/library.test.ts",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",

@@ -5,6 +5,7 @@ node_modules/
 # Build & Cloudflare
 dist/
 .wrangler/
+wrangler.production.toml
 .dev.vars
 .dev.vars.*
 !.dev.vars.example

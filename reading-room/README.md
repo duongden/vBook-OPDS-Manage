@@ -12,9 +12,7 @@ A private library browser and OPDS 1.2 acquisition catalog. Eight clearly labele
 
 ## Privacy and reader compatibility
 
-The deployed Sites copy uses owner-only ChatGPT authentication at the hosting gate. Common reading apps cannot complete this sign-in, so this private deployment is **not directly connectable from those readers**. Its feed can be inspected and downloaded from an authenticated browser. Do not change the Site audience to public merely to work around reader authentication.
-
-The same server supports HTTP Basic authentication for a separately hosted private deployment that OPDS readers can use. All application, API, book, cover and feed routes are protected. Missing credentials fail closed. Do not expose platform mode on an unprotected origin.
+The server uses HTTP Basic authentication for browser and OPDS access. All application, API, book, cover and feed routes are protected, and missing credentials fail closed.
 
 ## Run a private OPDS server
 
@@ -27,8 +25,6 @@ OPDS_USERNAME=reader OPDS_PASSWORD='replace-with-a-long-random-password' PORT=41
 
 Place this behind HTTPS before remote access. Use `https://your-private-host/opds` with the configured credentials in a reader supporting OPDS 1.2 and HTTP Basic authentication. Credentials are never placed in feed URLs. Authentication is server-side and returns a standard `401` challenge.
 
-For isolated loopback preview only: `AUTH_MODE=platform LOCAL_PREVIEW=1 npm start`. Sites production receives `AUTH_MODE=platform` as a runtime environment variable and relies on its external owner-only gate.
-
 ## Edit the catalog
 
 The initial catalog is intentionally read-only, with no upload/admin interface. Edit `src/books.json` and rebuild to change the original sample stories. The build script creates deterministic EPUBs from each sample's title, language and paragraphs. For real EPUB imports, extend the build to read real files and their metadata; do not label generated samples as full books. Source fields include id, title, author, language, category, summary, subtitle, paragraphs, cover color/accent/pattern.
@@ -37,6 +33,6 @@ The initial catalog is intentionally read-only, with no upload/admin interface. 
 
 ## Deployment
 
-`dist/index.js` is a self-contained Cloudflare-compatible module Worker. `.openai/hosting.json` stores the private Sites project identity. Build with `npm run build`, push the exact source state, save the built artifact as a Site version, and use private deployment. Never commit credentials. The build output embeds all small sample EPUBs; large real libraries should use authenticated object storage rather than embedding every file.
+`dist/index.js` is a self-contained Cloudflare-compatible module Worker. Never commit credentials. The build output embeds all small sample EPUBs; large real libraries should use authenticated object storage rather than embedding every file.
 
 Specification: https://specs.opds.io/opds-1.2.html

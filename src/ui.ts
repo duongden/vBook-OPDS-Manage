@@ -346,7 +346,7 @@ export function renderHtmlPage(defaultApiKeyConfigured: boolean): string {
           !defaultApiKeyConfigured
             ? `<div class="form-group">
                  <label for="apiKeyInput">Google Drive API Key</label>
-                 <input type="text" id="apiKeyInput" placeholder="AIzaSy..." />
+                 <input type="text" id="apiKeyInput" placeholder="Dán API key của bạn" />
                </div>`
             : `<div class="form-group">
                  <label for="apiKeyInput">Google Drive API Key (Tùy chọn)</label>

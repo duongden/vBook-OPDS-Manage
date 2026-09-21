@@ -51,17 +51,15 @@ function cover(b){
 async function equal(a,b){const enc=new TextEncoder();const [x,y]=await Promise.all([crypto.subtle.digest('SHA-256',enc.encode(a)),crypto.subtle.digest('SHA-256',enc.encode(b))]);let d=0;const u=new Uint8Array(x),v=new Uint8Array(y);for(let i=0;i<u.length;i++)d|=u[i]^v[i];return d===0}
 function response(body,type,status=200,extra={}){return new Response(body,{status,headers:{'Content-Type':type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex, nofollow','Referrer-Policy':'no-referrer',...extra}})}
 async function route(req,env){
- const url=new URL(req.url),p=url.pathname;const mode=env.AUTH_MODE||'basic';
+ const url=new URL(req.url),p=url.pathname;
  if(p==='/robots.txt')return response('User-agent: *\nDisallow: /\n','text/plain');
- if(mode!=='platform'){
-  if(!env.OPDS_USERNAME||!env.OPDS_PASSWORD)return response('Private library is not configured. Set OPDS_USERNAME and OPDS_PASSWORD.','text/plain',503);
-  let supplied='';try{const h=req.headers.get('Authorization')||'';if(/^Basic /i.test(h))supplied=atob(h.slice(6))}catch{}
-  if(!await equal(supplied,env.OPDS_USERNAME+':'+env.OPDS_PASSWORD))return response(JSON.stringify({id:url.origin+'/auth',title:'Reading Room',authentication:[{type:'http://opds-spec.org/auth/basic',labels:{login:'Username',password:'Password'}}]}),'application/opds-authentication+json',401,{'WWW-Authenticate':'Basic realm="Reading Room", charset="UTF-8"'});
- }
+ if(!env.OPDS_USERNAME||!env.OPDS_PASSWORD)return response('Private library is not configured. Set OPDS_USERNAME and OPDS_PASSWORD.','text/plain',503);
+ let supplied='';try{const h=req.headers.get('Authorization')||'';if(/^Basic /i.test(h))supplied=atob(h.slice(6))}catch{}
+ if(!await equal(supplied,env.OPDS_USERNAME+':'+env.OPDS_PASSWORD))return response(JSON.stringify({id:url.origin+'/auth',title:'Reading Room',authentication:[{type:'http://opds-spec.org/auth/basic',labels:{login:'Username',password:'Password'}}]}),'application/opds-authentication+json',401,{'WWW-Authenticate':'Basic realm="Reading Room", charset="UTF-8"'});
  if(!['GET','HEAD'].includes(req.method))return response('Method not allowed','text/plain',405,{'Allow':'GET, HEAD'});
  if(p==='/')return response(APP,'text/html; charset=utf-8',200,{'Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; form-action 'self'"});
  if(p==='/api/books')return response(JSON.stringify({books:filtered(url.searchParams).map(clean),updated:UPDATED}),'application/json; charset=utf-8');
- if(p==='/api/status')return response(JSON.stringify({auth:mode,readerAccess:mode==='platform'?'requires-chatgpt-session':'basic-auth',feed:'/opds',sampleCount:BOOKS.length,updated:UPDATED}),'application/json');
+ if(p==='/api/status')return response(JSON.stringify({auth:'basic',readerAccess:'basic-auth',feed:'/opds',sampleCount:BOOKS.length,updated:UPDATED}),'application/json');
  if(p==='/opds'||p==='/opds/')return response(feed(url),TYPE+';charset=utf-8');
  if(p==='/opds/search.xml')return response(`<?xml version="1.0" encoding="UTF-8"?><OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/"><ShortName>Reading Room</ShortName><Description>Search the private sample library</Description><InputEncoding>UTF-8</InputEncoding><Url type="${TYPE}" template="${esc(url.origin)}/opds?q={searchTerms}"/></OpenSearchDescription>`,'application/opensearchdescription+xml; charset=utf-8');
  let m=p.match(/^\/opds\/books\/([a-z0-9-]+)$/);if(m){const b=BOOKS.find(x=>x.id===m[1]);return b?response('<?xml version="1.0" encoding="UTF-8"?>'+entry(b,url.origin,true),'application/atom+xml;type=entry;profile=opds-catalog;charset=utf-8'):response('Book not found','text/plain',404)}
