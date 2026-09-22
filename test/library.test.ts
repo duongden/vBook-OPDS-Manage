@@ -199,6 +199,10 @@ test('multiple pasted OPDS URLs create one aggregate catalog without Drive',asyn
   assert.equal(driveCalls,before);const items=await(await h.req(base(a)+'/items')).json() as any;assert.deepEqual(items.items,[]);
   const sources=await(await h.req(base(a)+'/sources')).json() as any;assert.equal(sources.sources.length,2);assert.deepEqual(sources.sources.map((source:any)=>source.name),['Kho sách được chia sẻ','Kho thứ hai']);
   const aggregate=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));assert.equal(aggregate.status,200);const xml=await aggregate.text();assert.match(xml,/Kho sách được chia sẻ/);assert.match(xml,/Kho thứ hai/);
+  const addedDrive=await h.req(base(a)+'/drive','PUT',{drive:'https://drive.google.com/drive/folders/'+ROOT});assert.equal(addedDrive.status,200);assert.equal((await addedDrive.json() as any).hasDrive,true);
+  assert.equal((await (await h.req(base(a)+'/items')).json() as any).items.length,3);
+  const removedDrive=await h.req(base(a)+'/drive','DELETE',{});assert.equal(removedDrive.status,200);assert.equal((await removedDrive.json() as any).hasDrive,false);
+  assert.deepEqual((await (await h.req(base(a)+'/items')).json() as any).items,[]);
 });
 test('same Drive file has isolated overrides and capabilities for each library', async()=>{
   const h=harness(),a=await h.create();const aItems=await(await h.req(base(a)+'/items')).json() as any;
@@ -303,9 +307,10 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     field('#create','drive',ROOT);field('#create','name','Thư viện UI');field('#create','username','owner');field('#create','password','ui-password-12345');submit('#create');
     await wait(()=>d.querySelectorAll('.book').length===3&&d.querySelector('#connection')!.hasAttribute('open'));
     assert.ok(d.querySelector('#secret-values')!.textContent!.includes('reader'));
-    click('[data-close="connection"]');click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));
+    click('[data-close="connection"]');click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));assert.match(d.querySelector('#drive-status')!.textContent!,/Đã kết nối/);
+    field('#drive-form','drive','https://drive.google.com/drive/folders/'+ROOT);submit('#drive-form');await wait(()=>d.querySelector('#notice')!.textContent==='Đã cập nhật nguồn Google Drive.');assert.equal((d.querySelector('#drive-remove') as HTMLButtonElement).hidden,false);
     field('#source-form','urls','https://catalog.example/opds');field('#source-form','username','shared');field('#source-form','password','source-secret');submit('#source-form');
-    await wait(()=>d.querySelectorAll('.source-row').length===1);assert.equal(d.querySelector('#source-count')!.textContent,'1');assert.ok(d.querySelector('#source-list')!.textContent!.includes('Kho sách được chia sẻ'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('source-secret'));
+    await wait(()=>d.querySelectorAll('.source-row').length===1);assert.equal(d.querySelector('#source-count')!.textContent,'2');assert.ok(d.querySelector('#source-list')!.textContent!.includes('Kho sách được chia sẻ'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('source-secret'));
     click('[data-close="sources"]');click('#load-more');await wait(()=>d.querySelectorAll('.book').length===6);
     click('#view-table');assert.equal(d.querySelectorAll('tbody tr').length,6);
     click('[data-open]');assert.ok(d.querySelector('#editor')!.hasAttribute('open'));

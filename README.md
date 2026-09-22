@@ -1,4 +1,4 @@
-# VBook Library / OPDS Gateway — v1.8.0
+# VBook Library / OPDS Gateway — v1.8.1
 
 Giao diện quản lý thư viện Google Drive và các catalog OPDS được chia sẻ dành cho vBook. Web có thể gộp hai loại nguồn vào một link OPDS ngắn, có tài khoản riêng.
 
@@ -7,6 +7,7 @@ Giao diện quản lý thư viện Google Drive và các catalog OPDS được c
 ## Đã có
 
 - Tạo thư viện bằng một thư mục Drive, danh sách OPDS có sẵn, hoặc cả hai.
+- Sau khi đăng nhập, có thể thêm, thay thế hoặc gỡ thư mục Drive trong mục **Nguồn sách**.
 - Thêm tối đa 10 URL OPDS mỗi lần; bật/tắt, sao chép link proxy ngắn hoặc xóa từng nguồn.
 - Gộp sách Drive và các catalog OPDS vào một URL `/o/:short_id`; credential của nguồn được mã hóa trước khi lưu.
 - Quét đồng thời Drive và các nguồn OPDS đang bật, đi theo catalog con/phân trang và gom sách vào cùng kết quả tìm/lọc trên web.
@@ -88,9 +89,11 @@ Bấm **Tạo catalog tổng hợp** và lưu ngay:
 
 Mã khôi phục và mật khẩu OPDS chỉ hiển thị khi vừa được cấp. Không nhập mật khẩu quản lý vào vBook.
 
-### 3. Thêm các link OPDS đã có
+### 3. Quản lý nguồn Drive và OPDS
 
-Trong trang quản lý, bấm **Nguồn OPDS**. Dán mỗi URL trên một dòng; mỗi lần có thể thêm từ 1 đến 10 URL.
+Trong trang quản lý, bấm **Nguồn sách**. Phần **Google Drive** cho phép thêm thư mục Drive vào catalog hiện tại, thay bằng thư mục khác hoặc gỡ nguồn Drive mà không cần đăng xuất. Khi thay đổi, dán link thư mục hoặc Folder ID; file trên Drive không bị chỉnh sửa hay xóa.
+
+Ở phần **Nguồn OPDS**, dán mỗi URL trên một dòng; mỗi lần có thể thêm từ 1 đến 10 URL.
 
 ![Giao diện quản lý nguồn OPDS với dữ liệu giả](docs/images/nguon-opds.png)
 

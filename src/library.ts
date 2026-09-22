@@ -56,6 +56,18 @@ function googleKey(c: C): string {
   if (!c.env.GOOGLE_API_KEY) fail(503, 'Chưa cấu hình Google Drive API Key trên máy chủ.');
   return c.env.GOOGLE_API_KEY;
 }
+async function validateDriveFolder(c: C, input: unknown): Promise<string> {
+  const value = stringInput(input, 2048, 'Link thư mục Drive', true);
+  const folder = extractFolderId(value);
+  if (!folder) fail(400, value.includes('://') ? 'Link thư mục Drive không hợp lệ.' : 'Folder ID không hợp lệ.');
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${folder}`);
+  url.searchParams.set('key', googleKey(c)); url.searchParams.set('fields', 'id,mimeType'); url.searchParams.set('supportsAllDrives', 'true');
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+  if (!res.ok) fail(400, 'Không đọc được thư mục. Kiểm tra chia sẻ “Bất kỳ ai có đường liên kết”.');
+  const meta = await res.json() as { mimeType?: string };
+  if (meta.mimeType !== 'application/vnd.google-apps.folder') fail(400, 'Link phải trỏ tới thư mục Drive.');
+  return folder!;
+}
 async function rateLimit(c: C, scope: string, limit = 12): Promise<void> {
   const now = Date.now();
   const key = await bookKey(c.env.MASK_SECRET, 'rate-limit', `${scope}:${c.req.header('CF-Connecting-IP') || 'local'}`);
@@ -131,15 +143,7 @@ api.post('/api/libraries', async c => {
     }
   }
   if (initialOpds.length > 10) fail(400, 'Tối đa 10 nguồn OPDS khi tạo thư viện.');
-  if (folder) {
-    // Confirm the supplied resource really is a readable folder (including empty ones).
-    const url = new URL(`https://www.googleapis.com/drive/v3/files/${folder}`);
-    url.searchParams.set('key', googleKey(c)); url.searchParams.set('fields', 'id,mimeType'); url.searchParams.set('supportsAllDrives', 'true');
-    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
-    if (!res.ok) fail(400, 'Không đọc được thư mục. Kiểm tra chia sẻ “Bất kỳ ai có đường liên kết”.');
-    const meta = await res.json() as { mimeType?: string };
-    if (meta.mimeType !== 'application/vnd.google-apps.folder') fail(400, 'Link phải trỏ tới thư mục Drive.');
-  }
+  if (folder) folder = await validateDriveFolder(c, folder);
   const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomToken(), opds = randomToken();
   const sources = await Promise.all(initialOpds.map(source => prepareSource(c.env.MASK_SECRET, id, source)));
   const now = Date.now();
@@ -210,6 +214,20 @@ api.post('/api/libraries/:id/opds-credentials', async c => {
   const password = randomToken(), lib = c.get('library');
   await c.env.DB.prepare('UPDATE libraries SET opds_hash = ? WHERE id = ?').bind(await digest(`reader:${password}`), lib.id).run();
   return c.json({ opds: credentials(c, lib, password) });
+});
+api.put('/api/libraries/:id/drive', async c => {
+  const body = await jsonBody(c), lib = c.get('library');
+  const folder = await validateDriveFolder(c, body.drive);
+  const token = await maskFolderId(folder, c.env.MASK_SECRET);
+  const changed = await c.env.DB.prepare('UPDATE libraries SET root_token = ? WHERE id = ?').bind(token, lib.id).run();
+  if (changed.meta.changes !== 1) fail(409, 'Không cập nhật được nguồn Drive. Hãy tải lại trang.');
+  return c.json({ hasDrive: true });
+});
+api.delete('/api/libraries/:id/drive', async c => {
+  const lib = c.get('library');
+  const changed = await c.env.DB.prepare("UPDATE libraries SET root_token = '' WHERE id = ?").bind(lib.id).run();
+  if (changed.meta.changes !== 1) fail(409, 'Không gỡ được nguồn Drive. Hãy tải lại trang.');
+  return c.json({ hasDrive: false });
 });
 api.post('/api/libraries/:id/delete', async c => {
   const body = await jsonBody(c), lib = c.get('library');

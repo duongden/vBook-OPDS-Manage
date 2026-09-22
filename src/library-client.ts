@@ -32,7 +32,9 @@ function renderConnection(){
  (recoveryCode?'<div class="secret">Mã khôi phục — lưu riêng, không nhập vào vBook<code>'+escapeHtml(recoveryCode)+'</code></div>':'');
 }
 function renderSources(){
- $('#source-count').textContent=String(sources.length);
+ $('#source-count').textContent=String(sources.length+(library?.hasDrive?1:0));
+ $('#drive-status').textContent=library?.hasDrive?'Đã kết nối một thư mục Drive. Dán link mới bên dưới để thay thế.':'Chưa kết nối thư mục Drive.';
+ $('#drive-save').textContent=library?.hasDrive?'Thay thư mục Drive':'Thêm thư mục Drive';$('#drive-remove').hidden=!library?.hasDrive;
  $('#source-list').innerHTML=sources.length?sources.map(source=>'<article class="source-row"><div><h3>'+escapeHtml(source.name)+'</h3><p>'+escapeHtml(source.host)+(source.hasCredentials?' · Có xác thực':' · Công khai')+'</p><p class="muted">'+escapeHtml(source.url)+'</p></div><div class="source-actions"><label class="source-enabled"><input type="checkbox" data-source-toggle="'+escapeHtml(source.id)+'" '+(source.enabled?'checked':'')+'> Bật</label><button class="icon-button" data-source-copy="'+escapeHtml(source.id)+'" aria-label="Sao chép link '+escapeHtml(source.name)+'" title="Sao chép link">'+svgIcon('copy')+'</button><button class="icon-button danger" data-source-delete="'+escapeHtml(source.id)+'" aria-label="Xóa nguồn '+escapeHtml(source.name)+'" title="Xóa nguồn">'+svgIcon('trash')+'</button></div></article>').join(''):'<p class="muted">Chưa có nguồn OPDS.</p>';
 }
 async function loadSources(){
@@ -158,6 +160,8 @@ $('#copy-opds').addEventListener('click',async()=>{try{await navigator.clipboard
 $('#rotate-opds').addEventListener('click',async()=>{if(!confirm('Mật khẩu OPDS cũ sẽ hết hiệu lực. Bạn sẽ cần cập nhật lại trong vBook.'))return;$('#rotate-opds').disabled=true;try{const data=await api(endpoint('/opds-credentials'),'POST',{});activeOpds=data.opds;renderConnection();}catch(e){notice(e.message,true);}finally{$('#rotate-opds').disabled=false;}});
 $('#password-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{const data=await api(endpoint('/password'),'POST',Object.fromEntries(new FormData(f)));csrf=data.csrf;f.reset();$('#account').close();notice('Đã đổi mật khẩu và kết thúc các phiên cũ.');});});
 $('#delete-form').addEventListener('submit',event=>{event.preventDefault();if(!confirm('Xóa vĩnh viễn tài khoản thư viện và metadata chỉnh sửa? File Drive không bị ảnh hưởng.'))return;const f=event.currentTarget;submitForm(f,async()=>{await api(endpoint('/delete'),'POST',Object.fromEntries(new FormData(f)));f.reset();leave();notice('Đã xóa dữ liệu quản lý thư viện.');});});
+$('#drive-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{const data=await api(endpoint('/drive'),'PUT',{drive:new FormData(f).get('drive')});library.hasDrive=data.hasDrive;f.reset();renderSources();pauseScan();trail=[];await browse(false);notice('Đã cập nhật nguồn Google Drive.');});});
+$('#drive-remove').addEventListener('click',async()=>{if(!library.hasDrive||!confirm('Gỡ thư mục Drive khỏi catalog này? File trên Drive và metadata đã lưu không bị xóa.'))return;const button=$('#drive-remove');button.disabled=true;try{const data=await api(endpoint('/drive'),'DELETE',{});library.hasDrive=data.hasDrive;renderSources();pauseScan();trail=[];await browse(false);notice('Đã gỡ nguồn Google Drive khỏi catalog.');}catch(e){notice(e.message,true);}finally{button.disabled=false;}});
 $('#source-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{
  const values=Object.fromEntries(new FormData(f));const urls=[...new Set(String(values.urls||'').split(/\r?\n/).map(value=>value.trim()).filter(Boolean))];
  if(!urls.length||urls.length>10)throw new Error('Mỗi lần nhập từ 1 đến 10 URL, mỗi URL trên một dòng.');
