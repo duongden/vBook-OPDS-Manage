@@ -8,12 +8,14 @@ import { Library, getLibrary, presentItems, saveOverride, validateOverrides } fr
 import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomToken, revealData, seal, stringInput, unseal } from './library-security';
 import { managedFeed, XML_TYPE } from './library-feed';
 import { fetchOpds, OpdsSourceConfig, OpdsSourceRow, rewriteOpdsBody, safeOpdsUrl, sourceConfig, sourceToken, validateOpds } from './opds-source';
-import { scanOpdsSource } from './opds-scan';
+import { scanOpdsSource, ScannedOpdsItem } from './opds-scan';
 
 export interface LibraryEnv { DB: D1Database; MASK_SECRET: string; GOOGLE_API_KEY: string }
 interface Session { library_id: string; csrf: string; expires_at: number }
 type Bindings = { Bindings: LibraryEnv; Variables: { session: Session; library: Library } };
 type C = Context<Bindings>;
+interface AggregateTask { sourceId: string; target: string; key?: string }
+interface AggregateState { pending: AggregateTask[]; seen: string[]; seenBooks: string[]; failed: {id:string;name:string}[] }
 export const libraryApp = new Hono<Bindings>();
 const COOKIE = '__Host-vbook_session';
 const api = libraryApp;
@@ -116,6 +118,10 @@ async function prepareSource(secret: string, libraryId: string, raw: Record<stri
   const name = stringInput(raw.name ?? '', 120, 'Tên nguồn') || checked.title || safeOpdsUrl(config.url).hostname;
   return { id, shortId, name, token: await sourceToken(secret, libraryId, id, config) };
 }
+function sourceInputError(error: unknown, index: number, total: number): never {
+  if (error instanceof HTTPException) throw new HTTPException(error.status, { message: `URL OPDS thứ ${index + 1}/${total}: ${error.message}` });
+  throw error;
+}
 
 api.post('/api/libraries', async c => {
   await rateLimit(c, 'create', 5);
@@ -145,7 +151,10 @@ api.post('/api/libraries', async c => {
   if (initialOpds.length > 10) fail(400, 'Tối đa 10 nguồn OPDS khi tạo thư viện.');
   if (folder) folder = await validateDriveFolder(c, folder);
   const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomToken(), opds = randomToken();
-  const sources = await Promise.all(initialOpds.map(source => prepareSource(c.env.MASK_SECRET, id, source)));
+  const sources = await Promise.all(initialOpds.map(async (source, index) => {
+    try { return await prepareSource(c.env.MASK_SECRET, id, source); }
+    catch (error) { return sourceInputError(error, index, initialOpds.length); }
+  }));
   const now = Date.now();
   const statements = [c.env.DB.prepare('INSERT INTO libraries (id, short_id, name, root_token, username, password_hash, recovery_hash, opds_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(id, shortId, name, folder ? await maskFolderId(folder, c.env.MASK_SECRET) : '', username, await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(recovery), await digest(`reader:${opds}`), now)];
@@ -301,18 +310,22 @@ api.post('/api/libraries/:id/source-books/hide', async c => {
   await c.env.DB.batch(rows.map(row => c.env.DB.prepare('INSERT OR IGNORE INTO opds_exclusions (library_id, source_id, book_key, created_at) VALUES (?, ?, ?, ?)').bind(lib.id, row.sourceId, row.key, Date.now())));
   return c.json({ success: true, count: rows.length });
 });
-api.get('/api/libraries/:id/sources/:sourceId/download', async c => {
-  const lib = c.get('library'), sourceId = stringInput(c.req.param('sourceId'), 80, 'Mã nguồn', true);
-  const row = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE id = ? AND library_id = ? AND enabled = 1').bind(sourceId, lib.id).first<OpdsSourceRow>();
-  if (!row) fail(404, 'Không tìm thấy nguồn OPDS hoặc nguồn đang tắt.');
-  const value = await revealData<{url:string}>(c.env.MASK_SECRET, `opds-download:${lib.id}:${row!.id}`, c.req.query('ref') || '');
-  const target = safeOpdsUrl(String(value.url || '')), config = await sourceConfig(c.env.MASK_SECRET, row!);
+async function serveSourceDownload(c: C, row: OpdsSourceRow) {
+  const lib = c.get('library');
+  const value = await revealData<{url:string}>(c.env.MASK_SECRET, `opds-download:${lib.id}:${row.id}`, c.req.query('ref') || '');
+  const target = safeOpdsUrl(String(value.url || '')), config = await sourceConfig(c.env.MASK_SECRET, row);
   if (target.origin !== safeOpdsUrl(config.url).origin) return c.redirect(target.href, 302);
   let response: Response;
   try { response = await fetchOpds(config, target); } catch { return fail(503, 'Không tải được sách từ nguồn OPDS.'); }
   const headers = new Headers({ 'Content-Type': response.headers.get('content-type') || 'application/octet-stream', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
   for (const name of ['content-disposition','content-length','etag','last-modified']) { const value = response.headers.get(name); if (value) headers.set(name, value); }
   return new Response(response.body, { status: response.status, headers });
+}
+api.get('/api/libraries/:id/sources/:sourceId/download', async c => {
+  const lib = c.get('library'), sourceId = stringInput(c.req.param('sourceId'), 80, 'Mã nguồn', true);
+  const row = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE id = ? AND library_id = ? AND enabled = 1').bind(sourceId, lib.id).first<OpdsSourceRow>();
+  if (!row) fail(404, 'Không tìm thấy nguồn OPDS hoặc nguồn đang tắt.');
+  return serveSourceDownload(c, row!);
 });
 async function editableKey(c: C, ref: unknown): Promise<string> {
   const lib = c.get('library');
@@ -363,13 +376,29 @@ async function listSources(c: C) {
 }
 
 api.get('/api/libraries/:id/sources', async c => c.json({ sources: await listSources(c) }));
+api.post('/api/libraries/:id/sources/check', async c => {
+  const body = await jsonBody(c), lib = c.get('library');
+  if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 5) fail(400, 'Kiểm tra từ 1 đến 5 nguồn OPDS mỗi lần.');
+  const ids = (body.ids as unknown[]).map(id => stringInput(id, 80, 'Mã nguồn', true));
+  if (new Set(ids).size !== ids.length) fail(400, 'Danh sách nguồn OPDS bị trùng.');
+  const rows = (await c.env.DB.prepare(`SELECT * FROM opds_sources WHERE library_id = ? AND id IN (${ids.map(() => '?').join(',')})`).bind(lib.id, ...ids).all<OpdsSourceRow>()).results;
+  if (rows.length !== ids.length) fail(403, 'Nguồn OPDS không thuộc thư viện này.');
+  const byId = new Map(rows.map(row => [row.id, row]));
+  const checks = await Promise.all(ids.map(async id => {
+    try { await validateOpds(await sourceConfig(c.env.MASK_SECRET, byId.get(id)!)); return {id,ok:true}; }
+    catch { return {id,ok:false}; }
+  }));
+  return c.json({checks});
+});
 api.post('/api/libraries/:id/sources', async c => {
   const body = await jsonBody(c), lib = c.get('library');
   if (!Array.isArray(body.sources) || !body.sources.length || body.sources.length > 10) fail(400, 'Mỗi lần thêm từ 1 đến 10 nguồn OPDS.');
+  const inputs = body.sources as unknown[];
   const prepared: PreparedSource[] = [];
-  for (const raw of body.sources as unknown[]) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(400, 'Danh sách nguồn OPDS không hợp lệ.');
-    prepared.push(await prepareSource(c.env.MASK_SECRET, lib.id, raw as Record<string, unknown>));
+  for (const [index, raw] of inputs.entries()) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(400, `URL OPDS thứ ${index + 1}/${inputs.length}: dữ liệu không hợp lệ.`);
+    try { prepared.push(await prepareSource(c.env.MASK_SECRET, lib.id, raw as Record<string, unknown>)); }
+    catch (error) { sourceInputError(error, index, inputs.length); }
   }
   const now = Date.now();
   await c.env.DB.batch(prepared.map(source => c.env.DB.prepare('INSERT INTO opds_sources (id, library_id, short_id, name, config_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
@@ -424,19 +453,77 @@ async function serveOpds(c: C, feedPath: string, downloadPath: string) {
   const sourceRows = !q && !c.req.query('folder') && !c.req.query('cursor')
     ? (await c.env.DB.prepare('SELECT id, short_id, name FROM opds_sources WHERE library_id = ? AND enabled = 1 ORDER BY created_at, name').bind(lib.id).all<{id:string;short_id:string;name:string}>()).results
     : [];
-  const sources = sourceRows.map(source => ({ id: source.id, title: source.name, href: `${url.origin}/o/${lib.short_id}/s/${source.short_id}` }));
+  const sources = sourceRows.length ? [{ id: 'all', title: 'Kệ tổng hợp', href: `${url.origin}/o/${lib.short_id}/all` }] : [];
   return c.body(managedFeed({ libraryId: lib.id, title: q ? `Tìm kiếm: ${q}` : lib.name, feedUrl: start, downloadUrl: `${url.origin}${downloadPath}`, self: self.href, start, search: searchTemplate, next: data.nextCursor ? next.href : undefined, sources, ...data }, json), 200,
     { 'Content-Type': `${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`, Vary: 'Accept, Authorization' });
+}
+async function serveAggregate(c: C) {
+  const lib = c.get('library'), url = new URL(c.req.url), now = Date.now(), cursor = c.req.query('cursor') || '';
+  let state: AggregateState;
+  if (cursor) {
+    if (!/^[\w-]{43}$/.test(cursor)) fail(400, 'Con trỏ kệ tổng hợp không hợp lệ.');
+    const row = await c.env.DB.prepare('SELECT state FROM opds_aggregate_states WHERE id = ? AND library_id = ? AND expires_at > ?').bind(cursor, lib.id, now).first<{state:string}>();
+    if (!row) fail(400, 'Trang kệ tổng hợp đã hết hạn. Hãy mở lại kệ.');
+    state = JSON.parse(row!.state) as AggregateState;
+  } else {
+    await c.env.DB.prepare('DELETE FROM opds_aggregate_states WHERE expires_at < ?').bind(now).run();
+    const rows = (await c.env.DB.prepare('SELECT id FROM opds_sources WHERE library_id = ? AND enabled = 1 ORDER BY created_at, name').bind(lib.id).all<{id:string}>()).results;
+    state = { pending: rows.map(row => ({sourceId:row.id,target:''})), seen:[], seenBooks:[], failed:[] };
+  }
+  const pending = [...state.pending], seen = new Set(state.seen), seenBooks = new Set(state.seenBooks), failed = [...state.failed], books: ScannedOpdsItem[] = [], downloads: Record<string,string> = {};
+  let pages = 0;
+  while (pending.length && pages < 12 && books.length < 50) {
+    const task = pending.shift()!;
+    if (task.key && seen.has(task.key)) continue;
+    const row = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE id = ? AND library_id = ? AND enabled = 1').bind(task.sourceId, lib.id).first<OpdsSourceRow>();
+    if (!row) continue;
+    pages++;
+    let page: Awaited<ReturnType<typeof scanOpdsSource>>;
+    try { page = await scanOpdsSource(c.env.MASK_SECRET, lib.id, row, task.target); }
+    catch { if (!failed.some(item => item.id === row.id)) failed.push({id:row.id,name:row.name}); continue; }
+    if (seen.has(page.folderKey)) continue;
+    seen.add(page.folderKey);
+    downloads[row.id] = `${url.origin}/o/${lib.short_id}/s/${row.short_id}/d`;
+    const excluded = (await c.env.DB.prepare('SELECT book_key FROM opds_exclusions WHERE library_id = ? AND source_id = ?').bind(lib.id, row.id).all<{book_key:string}>()).results;
+    const hidden = new Set(excluded.map(item => item.book_key));
+    for (const item of page.items) {
+      if (item.isFolder) {
+        if (!seen.has(item.key) && !pending.some(job => job.key === item.key)) pending.push({sourceId:row.id,target:item.ref,key:item.key});
+      } else if (!hidden.has(item.key) && !seenBooks.has(item.key)) {
+        seenBooks.add(item.key);books.push(item);
+        if (seenBooks.size > 5000) seenBooks.delete(seenBooks.values().next().value!);
+      }
+    }
+    if (page.nextCursor) pending.push({sourceId:row.id,target:page.nextCursor});
+  }
+  const start = `${url.origin}/o/${lib.short_id}/all`, self = cursor ? `${start}?cursor=${cursor}` : start;
+  let next: string | undefined;
+  if (pending.length) {
+    const id = randomToken();
+    await c.env.DB.prepare('INSERT INTO opds_aggregate_states (id, library_id, state, expires_at) VALUES (?, ?, ?, ?)').bind(id, lib.id, JSON.stringify({pending,seen:[...seen],seenBooks:[...seenBooks],failed}), now + 3600000).run();
+    next = `${start}?cursor=${id}`;
+  }
+  const json = (c.req.header('Accept') || '').includes('application/opds+json');
+  return c.body(managedFeed({libraryId:lib.id,title:'Kệ tổng hợp'+(failed.length?' · '+failed.length+' nguồn lỗi':''),description:failed.length?'Không đọc được: '+failed.map(item=>item.name).join(', ')+'. Mở lại kệ để thử lại hoặc tắt nguồn lỗi.':undefined,feedUrl:start,downloadUrl:start,self,start,next,folderKey:'all',items:books,externalDownloads:downloads,
+    sources: !books.length && next ? [{id:'continue',title:'Tiếp tục tìm sách',href:next}] : []}, json), 200,
+    {'Content-Type':`${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`,Vary:'Accept, Authorization'});
 }
 async function downloadBook(c: C) {
   const lib = c.get('library');
   const item = await unseal(c.env.MASK_SECRET, c.req.query('ref') || '', lib.id, 'book');
   return c.redirect(`https://drive.google.com/uc?export=download&id=${item.id}&confirm=t`, 302);
 }
-api.get('/library/:id/opds', c => serveOpds(c, `/library/${c.get('library').id}/opds`, `/library/${c.get('library').id}/download`));
+api.get('/library/:id/opds', c => c.get('library').root_token ? serveOpds(c, `/library/${c.get('library').id}/opds`, `/library/${c.get('library').id}/download`) : serveAggregate(c));
 api.get('/library/:id/download', downloadBook);
-api.get('/o/:shortId', c => serveOpds(c, `/o/${c.get('library').short_id}`, `/o/${c.get('library').short_id}/d`));
+api.get('/o/:shortId', c => c.get('library').root_token ? serveOpds(c, `/o/${c.get('library').short_id}`, `/o/${c.get('library').short_id}/d`) : serveAggregate(c));
+api.get('/o/:shortId/all', serveAggregate);
 api.get('/o/:shortId/d', downloadBook);
+api.get('/o/:shortId/s/:sourceShortId/d', async c => {
+  const lib = c.get('library');
+  const row = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE library_id = ? AND short_id = ? AND enabled = 1').bind(lib.id, c.req.param('sourceShortId')).first<OpdsSourceRow>();
+  if (!row) fail(404, 'Không tìm thấy nguồn OPDS hoặc nguồn đang tắt.');
+  return serveSourceDownload(c, row!);
+});
 api.get('/o/:shortId/s/:sourceShortId', async c => {
   const lib = c.get('library');
   const found = await c.env.DB.prepare('SELECT * FROM opds_sources WHERE library_id = ? AND short_id = ? AND enabled = 1').bind(lib.id, c.req.param('sourceShortId')).first<OpdsSourceRow>();

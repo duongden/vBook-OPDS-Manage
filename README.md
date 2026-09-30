@@ -1,4 +1,4 @@
-# VBook Library / OPDS Gateway — v1.8.1
+# VBook Library / OPDS Gateway — v1.9.0
 
 Giao diện quản lý thư viện Google Drive và các catalog OPDS được chia sẻ dành cho vBook. Web có thể gộp hai loại nguồn vào một link OPDS ngắn, có tài khoản riêng.
 
@@ -8,7 +8,7 @@ Giao diện quản lý thư viện Google Drive và các catalog OPDS được c
 
 - Tạo thư viện bằng một thư mục Drive, danh sách OPDS có sẵn, hoặc cả hai.
 - Sau khi đăng nhập, có thể thêm, thay thế hoặc gỡ thư mục Drive trong mục **Nguồn sách**.
-- Thêm tối đa 10 URL OPDS mỗi lần; bật/tắt, sao chép link proxy ngắn hoặc xóa từng nguồn.
+- Dán tối đa 99 URL OPDS mỗi lần; bộ đếm báo link trùng và giới hạn, tiến trình thêm hiển thị từng nhóm 10 URL. Có thể kiểm tra lại, bật/tắt và xóa riêng từng nguồn lỗi.
 - Gộp sách Drive và các catalog OPDS vào một URL `/o/:short_id`; credential của nguồn được mã hóa trước khi lưu.
 - Quét đồng thời Drive và các nguồn OPDS đang bật, đi theo catalog con/phân trang và gom sách vào cùng kết quả tìm/lọc trên web.
 - Chọn, tải hoặc loại từng sách OPDS khỏi catalog tổng hợp; thao tác loại không xóa sách ở nguồn của người khác.
@@ -77,9 +77,7 @@ https://drive.google.com/drive/folders/THU_MUC_MAU_123
 
 ### 2. Tạo thư viện
 
-Mở VBook Library, chọn **Tạo thư viện**, rồi dán mỗi nguồn trên một dòng. Hệ thống nhận tối đa 10 URL OPDS HTTPS và một link `drive.google.com`, sau đó gộp tất cả vào cùng một catalog. Nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự; bạn cũng có thể để trống danh sách và thêm nguồn ở bước 3.
-
-![Giao diện tạo thư viện với dữ liệu giả](docs/images/tao-thu-vien.png)
+Mở VBook Library, chọn **Tạo thư viện**. Dán **URL OPDS HTTPS thuần**, mỗi dòng một link; không dán cả cú pháp Markdown `[link](URL)` hoặc link trang chat như Discord. Có thể nhập tối đa **99 link OPDS khác nhau** và tùy chọn một link thư mục Drive. Bộ đếm ngay dưới ô nhập cho biết số link hợp lệ về mặt số lượng, dòng trùng và lúc vượt giới hạn; nội dung feed sẽ được kiểm tra khi bấm tạo. Nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự. Có thể để trống danh sách nguồn và thêm sau ở bước 3.
 
 Bấm **Tạo catalog tổng hợp** và lưu ngay:
 
@@ -93,13 +91,23 @@ Mã khôi phục và mật khẩu OPDS chỉ hiển thị khi vừa được c�
 
 Trong trang quản lý, bấm **Nguồn sách**. Phần **Google Drive** cho phép thêm thư mục Drive vào catalog hiện tại, thay bằng thư mục khác hoặc gỡ nguồn Drive mà không cần đăng xuất. Khi thay đổi, dán link thư mục hoặc Folder ID; file trên Drive không bị chỉnh sửa hay xóa.
 
-Ở phần **Nguồn OPDS**, dán mỗi URL trên một dòng; mỗi lần có thể thêm từ 1 đến 10 URL.
+Ở phần **Nguồn OPDS**, dán mỗi URL trên một dòng; mỗi lần có thể dán từ 1 đến 99 link. Dòng trùng chỉ được tính và thêm một lần. Sau khi bấm **Thêm và kiểm tra nguồn**, giao diện hiển thị `Đã kiểm tra và thêm X / Y nguồn OPDS`; hệ thống gửi từng nhóm tối đa 10 link đến API. Nếu một link trong nhóm không phải feed OPDS, không truy cập được hoặc cần tài khoản khác, thông báo chỉ rõ **nhóm URL** và **vị trí URL trong nhóm**. Những nhóm đã thành công được giữ lại; nhóm lỗi và các link sau vẫn ở ô nhập để sửa rồi thử lại. Khi tạo thư viện bằng hơn 10 link, thư viện có thể đã được tạo trước khi nhóm sau gặp lỗi: hãy lưu mã thư viện/mã khôi phục đang hiển thị, rồi vào **Nguồn sách** để tiếp tục.
 
-![Giao diện quản lý nguồn OPDS với dữ liệu giả](docs/images/nguon-opds.png)
+Trong vBook, **Kệ tổng hợp** hiển thị sách từ các nguồn OPDS đang bật trong cùng một kệ. Gateway lần theo các trang kế tiếp và thư mục con của từng feed qua phân trang OPDS; nguồn tắt hoặc sách đã loại khỏi catalog không xuất hiện. Nếu thư viện không có Drive, link OPDS của thư viện mở thẳng kệ này. Nếu có Drive, kệ nằm trong catalog cùng với sách Drive. Link Discord hoặc trang HTML thường không phải feed OPDS và sẽ bị từ chối khi kiểm tra nguồn.
 
 - Nguồn công khai: để trống username và mật khẩu.
 - Nguồn có Basic Auth: nhập tài khoản mà chủ nguồn đã cấp. Một lần thêm dùng chung tài khoản cho các URL trong ô.
-- Sau khi kiểm tra thành công, dùng công tắc để bật/tắt nguồn, biểu tượng sao chép để lấy link ngắn riêng, hoặc biểu tượng thùng rác để xóa.
+- Sau khi thêm, dùng công tắc để bật/tắt nguồn, biểu tượng sao chép để lấy link ngắn riêng, hoặc biểu tượng thùng rác để gỡ nguồn khỏi thư viện. Thao tác này không xóa sách ở máy chủ nguồn.
+- Bấm **Kiểm tra link đã lưu** để kiểm tra lại từng nguồn. Giao diện báo số nguồn đã kiểm tra và số lỗi. Dòng không đọc được sẽ hiện lỗi cùng nút **Xóa link lỗi**; có thể tắt nguồn trước nếu chỉ muốn tạm bỏ qua. Kệ tổng hợp tiếp tục hiển thị sách từ nguồn còn hoạt động và báo số nguồn lỗi trong tiêu đề.
+
+| Thông báo | Ý nghĩa và cách xử lý |
+| --- | --- |
+| `Đã nhập X / 99 URL OPDS` | Đếm link khác nhau trong ô. Nếu báo **Vượt giới hạn**, bớt link hoặc chia lần nhập. |
+| `Đã kiểm tra và thêm X / Y nguồn OPDS` | Đang xử lý; đợi đến khi đủ `Y / Y` hoặc có thông báo lỗi. |
+| `Nhóm URL A–B: URL OPDS thứ C/D…` | Một link trong nhóm đó lỗi. Kiểm tra link thứ `C` của nhóm `A–B`; nhóm này và các link sau vẫn ở ô để thử lại. |
+| `N nguồn lỗi` | Các feed đã lưu hiện không đọc được. Mở dòng lỗi để tắt hoặc bấm **Xóa link lỗi**. |
+
+Thông báo và tiến trình nằm trong hộp thoại đang mở, ở phần đầu hộp thoại; chúng không bị lớp nền che. Nếu link gốc đã đổi hoặc tài khoản nguồn hết hạn, hãy gỡ nguồn cũ rồi thêm URL/tài khoản mới.
 
 Tài khoản nguồn không hiển thị lại trên giao diện. Nếu cần thay URL hoặc credential, hãy xóa nguồn cũ và thêm lại. Chỉ dùng URL `https://` công khai; địa chỉ localhost hoặc mạng nội bộ bị từ chối.
 
@@ -206,6 +214,8 @@ pnpm run deploy
 ```
 
 `wrangler.production.toml` bị Git bỏ qua. Không lưu API key, `MASK_SECRET`, mật khẩu hoặc ID hạ tầng trong repository, URL hay ảnh chụp. Sao lưu D1 trước migration mới và giữ `MASK_SECRET` ổn định; thay hoặc mất secret sẽ làm hỏng token nguồn và ánh xạ metadata hiện có.
+
+Khi **nâng cấp một thư viện đã triển khai**, giữ nguyên `wrangler.production.toml`, D1 và các secret hiện có; không tạo database hoặc tài khoản thư viện mới. Ghi lại bookmark Time Travel của D1 bằng `pnpm exec wrangler d1 time-travel info DB --config wrangler.production.toml`, rồi áp dụng migration `0006_opds_aggregate_states.sql` bằng lệnh `d1 migrations apply` ở trên **trước** khi deploy Worker mới. Cloudflare D1 có [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) và Wrangler ghi backup khi áp dụng migration. Sau deploy, mở trang quản lý, thử nhập hơn 10 feed giả lập hoặc nguồn của bạn, kiểm tra một nguồn lỗi và nút xóa, rồi mở **Kệ tổng hợp** trong vBook để kiểm tra phân trang và tải sách. Các URL OPDS cá nhân chỉ nhập vào giao diện quản lý, không đưa vào mã nguồn hoặc ảnh hướng dẫn.
 
 Sau deploy, dùng một thư mục Drive thử để kiểm tra tạo thư viện, quét thư mục con, sửa metadata, Basic Auth OPDS, phân trang, bìa và tải sách trên vBook thật. Theo dõi lỗi 401/429/5xx và mức sử dụng D1/Drive trên Cloudflare; không ghi credential hoặc URL Drive vào log.
 

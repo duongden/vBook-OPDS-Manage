@@ -2,6 +2,7 @@
 export const libraryClient = String.raw`
 'use strict';
 const $ = s => document.querySelector(s);
+const MAX_PASTED_OPDS_URLS=99,OPDS_BATCH_SIZE=10;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const langName = value => ({vi:'Tiếng Việt',en:'English',fr:'Français','zh-Hans':'中文',ja:'日本語',ko:'한국어'}[value] || value || 'Chưa rõ');
 const sizeName = value => {if(value === undefined || value === '')return '—';let n=Number(value),u=0;const units=['B','KB','MB','GB'];while(n>=1024&&u<3){n/=1024;u++;}return n.toLocaleString('vi',{maximumFractionDigits:1})+' '+units[u];};
@@ -10,13 +11,20 @@ function applyTheme(theme,persist=false){document.documentElement.dataset.theme=
 let theme=savedTheme();applyTheme(theme);
 let library=null,csrf='',pageItems=new Map(),scanItems=new Map(),selected=new Set(),view='grid',scanMode=false;
 let trail=[],nextCursor=null,busy=false,editing=null,scanQueue=[],scanSeen=new Set(),scanRunning=false,scanComplete=false,scanPages=0,scanController=null;
-let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0,sources=[];
+let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0,sources=[],sourceChecks=new Map();
 const svgIcon=name=>({
  copy:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
  trash:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>',
  download:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>'
 }[name]||'');
-function notice(message,error=false){const el=$('#notice');el.textContent=message;el.classList.toggle('error',error);el.hidden=!message;}
+const noticeHome=document.createComment('notice-home');$('#notice').before(noticeHome);
+function syncNoticePlacement(){
+ const el=$('#notice'),dialogs=[...document.querySelectorAll('dialog[open]')],active=dialogs[dialogs.length-1];
+ if(active){const head=active.querySelector('.dialog-head');if(head)head.after(el);else active.prepend(el);}
+ else noticeHome.after(el);
+}
+document.querySelectorAll('dialog').forEach(dialog=>new MutationObserver(syncNoticePlacement).observe(dialog,{attributes:true,attributeFilter:['open']}));
+function notice(message,error=false){syncNoticePlacement();const el=$('#notice');el.textContent=message;el.classList.toggle('error',error);el.hidden=!message;}
 async function api(path,method='GET',body,signal){
  const headers={};if(method!=='GET'){headers['Content-Type']='application/json';if(csrf)headers['X-CSRF-Token']=csrf;}
  const response=await fetch(path,{method,headers,credentials:'same-origin',body:body===undefined?undefined:JSON.stringify(body),signal});
@@ -35,13 +43,16 @@ function renderSources(){
  $('#source-count').textContent=String(sources.length+(library?.hasDrive?1:0));
  $('#drive-status').textContent=library?.hasDrive?'Đã kết nối một thư mục Drive. Dán link mới bên dưới để thay thế.':'Chưa kết nối thư mục Drive.';
  $('#drive-save').textContent=library?.hasDrive?'Thay thư mục Drive':'Thêm thư mục Drive';$('#drive-remove').hidden=!library?.hasDrive;
- $('#source-list').innerHTML=sources.length?sources.map(source=>'<article class="source-row"><div><h3>'+escapeHtml(source.name)+'</h3><p>'+escapeHtml(source.host)+(source.hasCredentials?' · Có xác thực':' · Công khai')+'</p><p class="muted">'+escapeHtml(source.url)+'</p></div><div class="source-actions"><label class="source-enabled"><input type="checkbox" data-source-toggle="'+escapeHtml(source.id)+'" '+(source.enabled?'checked':'')+'> Bật</label><button class="icon-button" data-source-copy="'+escapeHtml(source.id)+'" aria-label="Sao chép link '+escapeHtml(source.name)+'" title="Sao chép link">'+svgIcon('copy')+'</button><button class="icon-button danger" data-source-delete="'+escapeHtml(source.id)+'" aria-label="Xóa nguồn '+escapeHtml(source.name)+'" title="Xóa nguồn">'+svgIcon('trash')+'</button></div></article>').join(''):'<p class="muted">Chưa có nguồn OPDS.</p>';
+ $('#source-list').innerHTML=sources.length?sources.map(source=>{
+  const failed=sourceChecks.get(source.id)===false,checked=sourceChecks.get(source.id)===true;
+  return '<article class="source-row"><div><h3>'+escapeHtml(source.name)+'</h3><p>'+escapeHtml(source.host)+(source.hasCredentials?' · Có xác thực':' · Công khai')+'</p><p class="muted">'+escapeHtml(source.url)+'</p>'+(failed?'<p class="error">Không đọc được feed OPDS. Link hoặc tài khoản nguồn có thể đã thay đổi.</p>':checked?'<p>Đã kiểm tra: nguồn hoạt động.</p>':'')+'</div><div class="source-actions"><label class="source-enabled"><input type="checkbox" data-source-toggle="'+escapeHtml(source.id)+'" '+(source.enabled?'checked':'')+'> Bật</label><button class="icon-button" data-source-copy="'+escapeHtml(source.id)+'" aria-label="Sao chép link '+escapeHtml(source.name)+'" title="Sao chép link">'+svgIcon('copy')+'</button>'+(failed?'<button class="danger" data-source-delete="'+escapeHtml(source.id)+'">Xóa link lỗi</button>':'<button class="icon-button danger" data-source-delete="'+escapeHtml(source.id)+'" aria-label="Xóa nguồn '+escapeHtml(source.name)+'" title="Xóa nguồn">'+svgIcon('trash')+'</button>')+'</div></article>';
+ }).join(''):'<p class="muted">Chưa có nguồn OPDS.</p>';
 }
 async function loadSources(){
  if(!library)return;sources=(await api(endpoint('/sources'))).sources;renderSources();
 }
 async function enter(data){
- library=data.library;csrf=data.csrf;pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
+ library=data.library;csrf=data.csrf;sourceChecks.clear();pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
  $('#welcome').hidden=true;$('#dashboard').hidden=false;$('#logout').hidden=false;$('#account-button').hidden=false;$('#library-name').textContent=library.name;
  history.replaceState(null,'','/?library='+encodeURIComponent(library.id));
  $('#account-info').textContent='Mã thư viện: '+library.id+' · Tên đăng nhập: '+library.username;
@@ -49,7 +60,7 @@ async function enter(data){
  notice('');await Promise.all([browse(false),loadSources()]);if(data.opds||data.recoveryCode)showSecrets(data);
 }
 function leave(){
- pauseScan();requestEpoch++;library=null;csrf='';activeOpds=null;recoveryCode='';sources=[];pageItems.clear();scanItems.clear();selected.clear();editing=null;scanQueue=[];scanSeen.clear();
+ pauseScan();requestEpoch++;library=null;csrf='';activeOpds=null;recoveryCode='';sources=[];sourceChecks.clear();pageItems.clear();scanItems.clear();selected.clear();editing=null;scanQueue=[];scanSeen.clear();
  document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('#secret-values').replaceChildren();$('#items').replaceChildren();$('#edit-form').reset();
  $('#welcome').hidden=false;$('#dashboard').hidden=true;$('#logout').hidden=true;$('#account-button').hidden=true;tab('login');
 }
@@ -136,7 +147,23 @@ function previewCover(){if(!editing)return;const value=$('#edit-form').elements.
 function applyOverrides(key,o){
  [pageItems,scanItems].forEach(map=>{const b=map.get(key);if(!b)return;b.overrides=o;b.title=o.title||b.name;b.author=o.author||'';b.language=o.language||'';b.category=o.category||'';b.description=o.description||'';b.coverUrl=o.coverUrl||b.sourceCoverUrl||'';});fillFilters();render();
 }
-async function submitForm(form,action){const buttons=form.querySelectorAll('button');buttons.forEach(b=>b.disabled=true);try{await action();}catch(error){if(form.id==='edit-form')$('#edit-error').textContent=error.message;else {notice(error.message,true);const p=form.querySelector('.form-error')||Object.assign(document.createElement('p'),{className:'error form-error'});p.textContent=error.message;p.setAttribute('role','alert');form.append(p);}}finally{buttons.forEach(b=>b.disabled=false);}}
+async function submitForm(form,action){const buttons=form.querySelectorAll('button');form.querySelector('.form-error')?.remove();buttons.forEach(b=>b.disabled=true);try{await action();}catch(error){if(form.id==='edit-form')$('#edit-error').textContent=error.message;else {notice(error.message,true);const p=Object.assign(document.createElement('p'),{className:'error form-error'});p.textContent=error.message;p.setAttribute('role','alert');form.append(p);}}finally{buttons.forEach(b=>b.disabled=false);}}
+function splitUrls(value){return String(value||'').split(/\r?\n/).map(url=>url.trim()).filter(Boolean);}
+function isDriveInput(value){if(!value.includes('://'))return true;try{return new URL(value).hostname==='drive.google.com';}catch{return false;}}
+function pastedUrls(value,max=MAX_PASTED_OPDS_URLS){const urls=[...new Set(splitUrls(value))];if(urls.length>max)throw new Error(max===MAX_PASTED_OPDS_URLS?'Mỗi lần nhập tối đa 99 URL OPDS, mỗi URL trên một dòng.':'Mỗi lần nhập tối đa 99 URL OPDS và một link Drive, mỗi link trên một dòng.');return urls;}
+function updateUrlCount(){
+ const createLines=splitUrls($('#create textarea[name="drive"]').value),createUnique=[...new Set(createLines)],drive=createUnique.filter(isDriveInput).length,opds=createUnique.length-drive;
+ const createCount=$('#create-url-count');createCount.textContent='Đã nhập '+opds+' / 99 URL OPDS · '+drive+' / 1 link Drive'+(createLines.length>createUnique.length?' · '+(createLines.length-createUnique.length)+' dòng trùng sẽ bỏ qua':'')+(opds>99||drive>1?' · Vượt giới hạn':'');createCount.classList.toggle('error',opds>99||drive>1);
+ const sourceLines=splitUrls($('#source-form textarea[name="urls"]').value),sourceUnique=new Set(sourceLines),sourceCount=$('#source-url-count');sourceCount.textContent='Đã nhập '+sourceUnique.size+' / 99 URL OPDS'+(sourceLines.length>sourceUnique.size?' · '+(sourceLines.length-sourceUnique.size)+' dòng trùng sẽ bỏ qua':'')+(sourceUnique.size>99?' · Vượt giới hạn':'');sourceCount.classList.toggle('error',sourceUnique.size>99);
+}
+['#create textarea[name="drive"]','#source-form textarea[name="urls"]'].forEach(selector=>$(selector).addEventListener('input',updateUrlCount));updateUrlCount();
+async function addSourceBatches(urls,username='',password='',offset=0){
+ for(let i=0;i<urls.length;i+=OPDS_BATCH_SIZE){
+  const batch=urls.slice(i,i+OPDS_BATCH_SIZE);
+  try{const data=await api(endpoint('/sources'),'POST',{sources:batch.map(url=>({url,username,password}))});sources=data.sources;renderSources();$('#source-progress').textContent='Đã kiểm tra và thêm '+(offset+Math.min(i+batch.length,urls.length))+' / '+(offset+urls.length)+' nguồn OPDS.';notice($('#source-progress').textContent);}
+  catch(error){error.remainingUrls=urls.slice(i);error.addedCount=i;error.message='Nhóm URL '+(offset+i+1)+'–'+(offset+Math.min(i+OPDS_BATCH_SIZE,urls.length))+': '+error.message;$('#source-progress').textContent='Đã thêm '+(offset+i)+' / '+(offset+urls.length)+' nguồn OPDS; nhóm lỗi và các link sau vẫn ở ô nhập.';throw error;}
+ }
+}
 async function hideExternalBooks(books){
  for(let i=0;i<books.length;i+=50){const batch=books.slice(i,i+50);await api(endpoint('/source-books/hide'),'POST',{books:batch.map(book=>({sourceId:book.sourceId,key:book.key}))});batch.forEach(book=>{pageItems.delete(book.key);scanItems.delete(book.key);selected.delete(book.key);});}
  fillFilters();render();
@@ -150,26 +177,57 @@ document.addEventListener('click',async event=>{
  if(button.dataset.crumb!==undefined){pauseScan();trail=trail.slice(0,Number(button.dataset.crumb)+1);await browse(false);}
 });
 document.addEventListener('change',event=>{if(event.target.dataset.select){const key=event.target.dataset.select;event.target.checked?selected.add(key):selected.delete(key);render();}});
-['create','login','recovery'].forEach(id=>$('#'+id).addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget;submitForm(form,async()=>{const data=await api(id==='create'?'/api/libraries':id==='login'?'/api/session':'/api/recovery','POST',Object.fromEntries(new FormData(form)));form.reset();await enter(data);});}));
+['create','login','recovery'].forEach(id=>$('#'+id).addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget;submitForm(form,async()=>{
+ const values=Object.fromEntries(new FormData(form));
+ if(id==='create'){
+  const lines=pastedUrls(values.drive,MAX_PASTED_OPDS_URLS+1),drive=lines.filter(isDriveInput),opds=lines.filter(value=>!isDriveInput(value));
+  if(drive.length>1)throw new Error('Mỗi thư viện chỉ dùng tối đa một thư mục Drive.');
+  if(opds.length>MAX_PASTED_OPDS_URLS)throw new Error('Tối đa 99 URL OPDS khi tạo thư viện.');
+  notice(opds.length?'Đang kiểm tra '+Math.min(opds.length,OPDS_BATCH_SIZE)+' URL OPDS đầu và tạo thư viện...':'Đang tạo thư viện...');
+  const data=await api('/api/libraries','POST',{...values,drive:[...drive,...opds.slice(0,OPDS_BATCH_SIZE)].join('\n')});
+  form.reset();updateUrlCount();await enter(data);
+  if(opds.length>OPDS_BATCH_SIZE){
+   try{await addSourceBatches(opds.slice(OPDS_BATCH_SIZE),'','',OPDS_BATCH_SIZE);$('#source-progress').textContent='';notice('Đã thêm và kiểm tra '+opds.length+' nguồn OPDS.');}
+   catch(error){$('#source-form').elements.urls.value=error.remainingUrls.join('\n');updateUrlCount();notice('Thư viện đã tạo. Đã thêm '+(OPDS_BATCH_SIZE+error.addedCount)+' / '+opds.length+' nguồn OPDS. Mở Nguồn sách để thử lại các URL còn trong ô nhập. '+error.message,true);}
+  }
+  return;
+ }
+ const data=await api(id==='login'?'/api/session':'/api/recovery','POST',values);form.reset();await enter(data);
+ });}));
 $('#logout').addEventListener('click',async()=>{try{await api('/api/session','DELETE',{});leave();notice('Đã đăng xuất.');}catch(e){notice(e.message,true);}});
 $('#theme-toggle').addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';applyTheme(theme,true);});
 $('#account-button').addEventListener('click',()=>$('#account').showModal());
 $('#sources-button').addEventListener('click',()=>{renderSources();$('#sources').showModal();});
 $('#opds-button').addEventListener('click',()=>{renderConnection();$('#connection').showModal();});
-$('#copy-opds').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('#opds-url').value);$('#copy-opds').textContent='Đã sao chép';}catch{$('#opds-url').select();$('#copy-opds').textContent='Hãy sao chép link đã chọn';}});
-$('#rotate-opds').addEventListener('click',async()=>{if(!confirm('Mật khẩu OPDS cũ sẽ hết hiệu lực. Bạn sẽ cần cập nhật lại trong vBook.'))return;$('#rotate-opds').disabled=true;try{const data=await api(endpoint('/opds-credentials'),'POST',{});activeOpds=data.opds;renderConnection();}catch(e){notice(e.message,true);}finally{$('#rotate-opds').disabled=false;}});
+$('#copy-opds').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('#opds-url').value);$('#copy-opds').textContent='Đã sao chép';notice('Đã sao chép URL OPDS.');}catch{$('#opds-url').select();$('#copy-opds').textContent='Hãy sao chép link đã chọn';notice('Trình duyệt không cho sao chép tự động. URL đã được chọn, hãy sao chép thủ công.',true);}});
+$('#rotate-opds').addEventListener('click',async()=>{if(!confirm('Mật khẩu OPDS cũ sẽ hết hiệu lực. Bạn sẽ cần cập nhật lại trong vBook.'))return;$('#rotate-opds').disabled=true;try{const data=await api(endpoint('/opds-credentials'),'POST',{});activeOpds=data.opds;renderConnection();notice('Đã tạo mật khẩu OPDS mới. Hãy lưu lại và cập nhật trong vBook.');}catch(e){notice(e.message,true);}finally{$('#rotate-opds').disabled=false;}});
 $('#password-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{const data=await api(endpoint('/password'),'POST',Object.fromEntries(new FormData(f)));csrf=data.csrf;f.reset();$('#account').close();notice('Đã đổi mật khẩu và kết thúc các phiên cũ.');});});
 $('#delete-form').addEventListener('submit',event=>{event.preventDefault();if(!confirm('Xóa vĩnh viễn tài khoản thư viện và metadata chỉnh sửa? File Drive không bị ảnh hưởng.'))return;const f=event.currentTarget;submitForm(f,async()=>{await api(endpoint('/delete'),'POST',Object.fromEntries(new FormData(f)));f.reset();leave();notice('Đã xóa dữ liệu quản lý thư viện.');});});
 $('#drive-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{const data=await api(endpoint('/drive'),'PUT',{drive:new FormData(f).get('drive')});library.hasDrive=data.hasDrive;f.reset();renderSources();pauseScan();trail=[];await browse(false);notice('Đã cập nhật nguồn Google Drive.');});});
 $('#drive-remove').addEventListener('click',async()=>{if(!library.hasDrive||!confirm('Gỡ thư mục Drive khỏi catalog này? File trên Drive và metadata đã lưu không bị xóa.'))return;const button=$('#drive-remove');button.disabled=true;try{const data=await api(endpoint('/drive'),'DELETE',{});library.hasDrive=data.hasDrive;renderSources();pauseScan();trail=[];await browse(false);notice('Đã gỡ nguồn Google Drive khỏi catalog.');}catch(e){notice(e.message,true);}finally{button.disabled=false;}});
 $('#source-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{
- const values=Object.fromEntries(new FormData(f));const urls=[...new Set(String(values.urls||'').split(/\r?\n/).map(value=>value.trim()).filter(Boolean))];
- if(!urls.length||urls.length>10)throw new Error('Mỗi lần nhập từ 1 đến 10 URL, mỗi URL trên một dòng.');
- const data=await api(endpoint('/sources'),'POST',{sources:urls.map(url=>({url,username:values.username||'',password:values.password||''}))});sources=data.sources;f.reset();renderSources();notice('Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.');
+ const values=Object.fromEntries(new FormData(f)),urls=pastedUrls(values.urls);
+ if(!urls.length)throw new Error('Nhập ít nhất một URL OPDS.');
+ try{$('#source-progress').textContent='Đang kiểm tra 0 / '+urls.length+' nguồn OPDS.';notice($('#source-progress').textContent);await addSourceBatches(urls,values.username||'',values.password||'');f.reset();updateUrlCount();$('#source-progress').textContent='Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.';notice($('#source-progress').textContent);}
+ catch(error){if(error.remainingUrls)f.elements.urls.value=error.remainingUrls.join('\n');updateUrlCount();error.message='Đã thêm '+error.addedCount+' / '+urls.length+' nguồn OPDS. Các URL còn lại được giữ trong ô nhập. '+error.message;throw error;}
  });});
+$('#check-sources').addEventListener('click',async()=>{
+ const button=$('#check-sources'),status=$('#source-check-status'),ids=sources.map(source=>source.id);
+ if(!ids.length){status.textContent='Chưa có nguồn OPDS để kiểm tra.';notice(status.textContent);return;}
+ button.disabled=true;sourceChecks.clear();renderSources();
+ status.textContent='Đang kiểm tra 0 / '+ids.length+' nguồn OPDS.';notice(status.textContent);
+ try{
+  for(let i=0;i<ids.length;i+=5){
+   const data=await api(endpoint('/sources/check'),'POST',{ids:ids.slice(i,i+5)});
+   data.checks.forEach(check=>sourceChecks.set(check.id,check.ok));renderSources();
+   const failed=[...sourceChecks.values()].filter(ok=>!ok).length;status.textContent='Đã kiểm tra '+Math.min(i+5,ids.length)+' / '+ids.length+' nguồn · '+failed+' nguồn lỗi.'+(failed?' Xem dòng lỗi để tắt hoặc xóa link.':'');notice(status.textContent,Boolean(failed));
+  }
+ }catch(error){status.textContent='Kiểm tra chưa hoàn tất. '+error.message;notice(error.message,true);}
+ finally{button.disabled=false;}
+});
 $('#source-list').addEventListener('click',async event=>{
  const copy=event.target.closest('[data-source-copy]');if(copy){const source=sources.find(item=>item.id===copy.dataset.sourceCopy);if(!source)return;try{await navigator.clipboard.writeText(source.url);notice('Đã sao chép link nguồn OPDS.');}catch{notice('Không thể sao chép tự động.',true);}return;}
- const remove=event.target.closest('[data-source-delete]');if(remove){const source=sources.find(item=>item.id===remove.dataset.sourceDelete);if(!source||!confirm('Xóa nguồn OPDS “'+source.name+'”?'))return;const data=await api(endpoint('/sources/'+source.id),'DELETE');sources=data.sources;renderSources();notice('Đã xóa nguồn OPDS.');}
+ const remove=event.target.closest('[data-source-delete]');if(remove){const source=sources.find(item=>item.id===remove.dataset.sourceDelete);if(!source||!confirm('Gỡ nguồn OPDS “'+source.name+'” khỏi kệ tổng hợp? Sách ở nguồn gốc không bị xóa.'))return;remove.disabled=true;try{const data=await api(endpoint('/sources/'+source.id),'DELETE');sources=data.sources;sourceChecks.delete(source.id);renderSources();$('#source-check-status').textContent='Đã xóa nguồn. Bấm kiểm tra lại nếu cần.';notice('Đã gỡ link OPDS khỏi thư viện; sách ở nguồn gốc được giữ nguyên.');}catch(error){remove.disabled=false;notice('Không xóa được link OPDS. '+error.message,true);}}
 });
 $('#source-list').addEventListener('change',async event=>{const input=event.target.closest('[data-source-toggle]');if(!input)return;try{const data=await api(endpoint('/sources/'+input.dataset.sourceToggle),'PATCH',{enabled:input.checked});sources=data.sources;renderSources();}catch(e){input.checked=!input.checked;notice(e.message,true);}});
 $('#search').addEventListener('input',render);['language','format','sort'].forEach(id=>$('#'+id).addEventListener('change',render));

@@ -41,10 +41,12 @@ let quota = false;
 let incomplete = false;
 let failFolder = '';
 let driveCalls = 0;
+let unavailableSource = false;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init?: any) => {
   const url = new URL(typeof input === 'string' ? input : input.url || input.toString());
   if (url.hostname === 'catalog.example') {
+    if (unavailableSource && url.pathname === '/broken') return new Response('',{status:503});
     const headers = new Headers(init?.headers);
     if (headers.has('authorization')) assert.equal(headers.get('authorization'), 'Basic '+btoa('shared:source-secret'), 'Upstream credential is only sent by the proxy');
     if (url.pathname === '/book.epub') return new Response('fake-epub', {headers:{'Content-Type':'application/epub+zip','Content-Disposition':'attachment; filename="sample.epub"'}});
@@ -166,7 +168,11 @@ test('external OPDS sources aggregate behind short authenticated proxy links', a
   assert.ok(!stored.includes('catalog.example'));assert.ok(!stored.includes('source-secret'));
 
   const aggregate=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));assert.equal(aggregate.status,200);
-  const aggregateXml=await aggregate.text();assert.ok(aggregateXml.includes('Kho sách được chia sẻ'));assert.ok(aggregateXml.includes('/s/'+source.shortId));
+  const aggregateXml=await aggregate.text();assert.ok(aggregateXml.includes('Kệ tổng hợp'));assert.ok(aggregateXml.includes('/o/'+a.library.shortId+'/all'));
+  const shelf=await h.req('/o/'+a.library.shortId+'/all','GET',undefined,auth(a));assert.equal(shelf.status,200);
+  const shelfXml=await shelf.text();assert.match(shelfXml,/Sách mẫu/);
+  const shelfDownload=shelfXml.match(/rel="http:\/\/opds-spec\.org\/acquisition" href="([^"]+)"/)?.[1];assert.ok(shelfDownload);
+  const shelfFile=await h.req(new URL(shelfDownload).pathname+new URL(shelfDownload).search,'GET',undefined,auth(a));assert.equal(shelfFile.status,200);assert.equal(await shelfFile.text(),'fake-epub');
   assert.equal((await h.req(new URL(source.url).pathname)).status,401);
   const proxy=await h.req(new URL(source.url).pathname,'GET',undefined,auth(a));assert.equal(proxy.status,200);
   const xml=await proxy.text();assert.ok(!xml.includes('source-secret'));assert.ok(xml.includes('/s/'+source.shortId+'?target='));assert.ok(xml.includes('https://images.example/cover.jpg'));
@@ -192,17 +198,51 @@ test('external OPDS sources aggregate behind short authenticated proxy links', a
   await h.req(base(a)+'/sources/'+source.id,'PATCH',{enabled:true});
   changed=await h.req(base(a)+'/sources/'+source.id,'DELETE',{});assert.equal(changed.status,200);assert.deepEqual((await changed.json() as any).sources,[]);
   assert.equal((await h.req(base(a)+'/sources','POST',{sources:[{url:'https://127.0.0.1/opds'}]})).status,400);
+  const invalidBatch=await h.req(base(a)+'/sources','POST',{sources:[{url:'https://catalog.example/opds'},{url:'http://invalid.example/opds'}]});
+  assert.equal(invalidBatch.status,400);assert.match((await invalidBatch.json() as any).error,/URL OPDS thứ 2\/2/);
+  assert.deepEqual((await(await h.req(base(a)+'/sources')).json() as any).sources,[]);
 });
 test('multiple pasted OPDS URLs create one aggregate catalog without Drive',async()=>{
   const h=harness();const before=driveCalls;
   const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kho OPDS',drive:'https://catalog.example/opds\nhttps://catalog.example/second',username:'owner',password:'long-password-123'}));
   assert.equal(driveCalls,before);const items=await(await h.req(base(a)+'/items')).json() as any;assert.deepEqual(items.items,[]);
   const sources=await(await h.req(base(a)+'/sources')).json() as any;assert.equal(sources.sources.length,2);assert.deepEqual(sources.sources.map((source:any)=>source.name),['Kho sách được chia sẻ','Kho thứ hai']);
-  const aggregate=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));assert.equal(aggregate.status,200);const xml=await aggregate.text();assert.match(xml,/Kho sách được chia sẻ/);assert.match(xml,/Kho thứ hai/);
+  const aggregate=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));assert.equal(aggregate.status,200);const xml=await aggregate.text();assert.match(xml,/Kệ tổng hợp/);assert.equal((xml.match(/rel="http:\/\/opds-spec\.org\/acquisition"/g)||[]).length,2);
   const addedDrive=await h.req(base(a)+'/drive','PUT',{drive:'https://drive.google.com/drive/folders/'+ROOT});assert.equal(addedDrive.status,200);assert.equal((await addedDrive.json() as any).hasDrive,true);
   assert.equal((await (await h.req(base(a)+'/items')).json() as any).items.length,3);
   const removedDrive=await h.req(base(a)+'/drive','DELETE',{});assert.equal(removedDrive.status,200);assert.equal((await removedDrive.json() as any).hasDrive,false);
   assert.deepEqual((await (await h.req(base(a)+'/items')).json() as any).items,[]);
+});
+test('aggregate shelf traverses source pages and nested feeds without repeating books',async()=>{
+  const h=harness(),links=Array.from({length:13},(_,i)=>`https://catalog.example/opds?source=${i}`);
+  const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chung',drive:links.slice(0,10).join('\n'),username:'owner',password:'long-password-123'}));
+  assert.equal((await h.req(base(a)+'/sources','POST',{sources:links.slice(10).map(url=>({url}))})).status,201);
+  let path='/o/'+a.library.shortId,seen=0,pages=0;
+  while(path){
+    const response=await h.req(path,'GET',undefined,{...auth(a),Accept:'application/opds+json'});assert.equal(response.status,200);
+    const feed=await response.json() as any;seen+=feed.publications.length;pages++;
+    assert.equal(feed.navigation.some((entry:any)=>entry.title==='Kệ con'),false);
+    const next=feed.links.find((link:any)=>link.rel.includes('next'))?.href;
+    path=next?new URL(next).pathname+new URL(next).search:'';
+    assert.ok(pages<10,'aggregate pagination terminates');
+  }
+  assert.equal(seen,13);assert.ok(pages>1);
+  assert.equal((await h.req('/o/'+a.library.shortId+'/all?cursor=invalid','GET',undefined,auth(a))).status,400);
+});
+test('aggregate shelf keeps working sources visible when another feed becomes unavailable',async()=>{
+  const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chung',drive:'https://catalog.example/broken\nhttps://catalog.example/opds',username:'owner',password:'long-password-123'}));
+  unavailableSource=true;
+  try{
+    const sources=(await(await h.req(base(a)+'/sources')).json() as any).sources;
+    const checks=await h.req(base(a)+'/sources/check','POST',{ids:sources.map((source:any)=>source.id)});
+    assert.equal(checks.status,200);
+    assert.deepEqual((await checks.json() as any).checks.map((item:any)=>item.ok).sort(),[false,true]);
+    const response=await h.req('/o/'+a.library.shortId,'GET',undefined,{...auth(a),Accept:'application/opds+json'});
+    assert.equal(response.status,200);
+    const feed=await response.json() as any;
+    assert.match(feed.metadata.title,/1 nguồn lỗi/);
+    assert.equal(feed.publications.length,1);
+  }finally{unavailableSource=false;}
 });
 test('same Drive file has isolated overrides and capabilities for each library', async()=>{
   const h=harness(),a=await h.create();const aItems=await(await h.req(base(a)+'/items')).json() as any;
@@ -307,11 +347,17 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     field('#create','drive',ROOT);field('#create','name','Thư viện UI');field('#create','username','owner');field('#create','password','ui-password-12345');submit('#create');
     await wait(()=>d.querySelectorAll('.book').length===3&&d.querySelector('#connection')!.hasAttribute('open'));
     assert.ok(d.querySelector('#secret-values')!.textContent!.includes('reader'));
-    click('[data-close="connection"]');click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));assert.match(d.querySelector('#drive-status')!.textContent!,/Đã kết nối/);
-    field('#drive-form','drive','https://drive.google.com/drive/folders/'+ROOT);submit('#drive-form');await wait(()=>d.querySelector('#notice')!.textContent==='Đã cập nhật nguồn Google Drive.');assert.equal((d.querySelector('#drive-remove') as HTMLButtonElement).hidden,false);
+    click('#copy-opds');await wait(()=>d.querySelector('#notice')!.closest('dialog')?.id==='connection');
+    click('[data-close="connection"]');await wait(()=>!d.querySelector('#notice')!.closest('dialog'));
+    click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));assert.match(d.querySelector('#drive-status')!.textContent!,/Đã kết nối/);
+    field('#drive-form','drive','https://drive.google.com/drive/folders/'+ROOT);submit('#drive-form');await wait(()=>d.querySelector('#notice')!.textContent==='Đã cập nhật nguồn Google Drive.');assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');assert.equal((d.querySelector('#drive-remove') as HTMLButtonElement).hidden,false);
     field('#source-form','urls','https://catalog.example/opds');field('#source-form','username','shared');field('#source-form','password','source-secret');submit('#source-form');
     await wait(()=>d.querySelectorAll('.source-row').length===1);assert.equal(d.querySelector('#source-count')!.textContent,'2');assert.ok(d.querySelector('#source-list')!.textContent!.includes('Kho sách được chia sẻ'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('source-secret'));
-    click('[data-close="sources"]');click('#load-more');await wait(()=>d.querySelectorAll('.book').length===6);
+    field('#source-form','urls','http://invalid.example/opds');submit('#source-form');
+    await wait(()=>Boolean(d.querySelector('#source-form .form-error')));
+    assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');
+    assert.match(d.querySelector('#source-form .form-error')!.textContent!,/Nhóm URL 1–1: URL OPDS thứ 1\/1/);
+    click('[data-close="sources"]');await wait(()=>!d.querySelector('#notice')!.closest('dialog'));click('#load-more');await wait(()=>d.querySelectorAll('.book').length===6);
     click('#view-table');assert.equal(d.querySelectorAll('tbody tr').length,6);
     click('[data-open]');assert.ok(d.querySelector('#editor')!.hasAttribute('open'));
     field('#edit-form','title','Tên sửa UI');field('#edit-form','language','vi');field('#edit-form','coverUrl','https://images.example/ui.jpg');submit('#edit-form');
@@ -334,6 +380,75 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     assert.equal(d.querySelector('#secret-values')!.textContent,'');assert.equal(d.querySelectorAll('#items .book').length,0);
     assert.deepEqual(errors,[]);
   } finally {dom.window.close();}
+});
+test('URL counters show unique links and the source form adds more than ten in batches',async()=>{
+  const h=harness(),a=await h.create();
+  const dom=new JSDOM(libraryHtml,{url:'https://library.example/',runScripts:'outside-only'}),w=dom.window,d=w.document;
+  w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+  w.confirm=()=>true;
+  let cookie=h.cookie;
+  w.fetch=(async(path:string,init:any={})=>{
+    const response=await app.request('https://library.example'+path,{...init,headers:{Cookie:cookie,...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any);
+    if(response.headers.has('set-cookie'))cookie=response.headers.get('set-cookie')!.split(';')[0];
+    return response;
+  }) as any;
+  try{
+    w.eval(libraryClient);
+    const create=d.querySelector('#create textarea[name="drive"]') as HTMLTextAreaElement;
+    create.value='https://catalog.example/opds\nhttps://catalog.example/opds';create.dispatchEvent(new w.Event('input'));
+    assert.match(d.querySelector('#create-url-count')!.textContent!,/1 \/ 99 URL OPDS/);
+    assert.match(d.querySelector('#create-url-count')!.textContent!,/1 dòng trùng/);
+    create.value=Array.from({length:100},(_,i)=>`https://catalog.example/${i}`).join('\n');create.dispatchEvent(new w.Event('input'));
+    assert.match(d.querySelector('#create-url-count')!.textContent!,/Vượt giới hạn/);
+    const login=d.querySelector('#login') as HTMLFormElement;
+    (login.elements.namedItem('libraryId') as HTMLInputElement).value=a.library.id;(login.elements.namedItem('username') as HTMLInputElement).value='owner';(login.elements.namedItem('password') as HTMLInputElement).value='  long-password-123  ';
+    login.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    for(let i=0;i<300&&(d.querySelector('#dashboard') as HTMLElement).hidden;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal((d.querySelector('#dashboard') as HTMLElement).hidden,false);
+    const source=d.querySelector('#source-form textarea[name="urls"]') as HTMLTextAreaElement;
+    source.value=Array.from({length:11},(_,i)=>`https://catalog.example/opds?item=${i}`).join('\n');source.dispatchEvent(new w.Event('input'));
+    assert.match(d.querySelector('#source-url-count')!.textContent!,/11 \/ 99 URL OPDS/);
+    const form=d.querySelector('#source-form') as HTMLFormElement;
+    form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    for(let i=0;i<300&&d.querySelector('#notice')!.textContent!=='Đã thêm và kiểm tra 11 nguồn OPDS.';i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal(d.querySelector('#notice')!.textContent,'Đã thêm và kiểm tra 11 nguồn OPDS.');
+    assert.equal(d.querySelector('#source-url-count')!.textContent,'Đã nhập 0 / 99 URL OPDS');
+    assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,11);
+    source.value='https://catalog.example/broken';source.dispatchEvent(new w.Event('input'));form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    for(let i=0;i<300&&d.querySelectorAll('.source-row').length<12;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal(d.querySelectorAll('.source-row').length,12);
+    unavailableSource=true;
+    (d.querySelector('#check-sources') as HTMLButtonElement).click();
+    for(let i=0;i<300&&!d.querySelector('#source-check-status')!.textContent!.includes('12 / 12');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.match(d.querySelector('#source-check-status')!.textContent!,/1 nguồn lỗi/);
+    const failed=[...d.querySelectorAll('[data-source-delete]')].find(button=>button.textContent==='Xóa link lỗi') as HTMLButtonElement;
+    assert.ok(failed);failed.click();
+    for(let i=0;i<300&&d.querySelectorAll('.source-row').length!==11;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal(d.querySelectorAll('.source-row').length,11);
+  }finally{unavailableSource=false;dom.window.close();}
+});
+test('creating a library with eleven OPDS links imports every source',async()=>{
+  const h=harness(),dom=new JSDOM(libraryHtml,{url:'https://library.example/',runScripts:'outside-only'}),w=dom.window,d=w.document;
+  let cookie='';
+  w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+  w.fetch=(async(path:string,init:any={})=>{
+    const response=await app.request('https://library.example'+path,{...init,headers:{...(cookie?{Cookie:cookie}:{}),...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any);
+    if(response.headers.has('set-cookie'))cookie=response.headers.get('set-cookie')!.split(';')[0];
+    return response;
+  }) as any;
+  try{
+    w.eval(libraryClient);
+    const form=d.querySelector('#create') as HTMLFormElement;
+    (form.elements.namedItem('drive') as HTMLTextAreaElement).value=Array.from({length:11},(_,i)=>`https://catalog.example/opds?create=${i}`).join('\n');
+    (form.elements.namedItem('name') as HTMLInputElement).value='Kệ chung';
+    (form.elements.namedItem('username') as HTMLInputElement).value='owner';
+    (form.elements.namedItem('password') as HTMLInputElement).value='long-password-123';
+    form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    for(let i=0;i<300&&d.querySelector('#notice')!.textContent!=='Đã thêm và kiểm tra 11 nguồn OPDS.';i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal(d.querySelector('#notice')!.textContent,'Đã thêm và kiểm tra 11 nguồn OPDS.');
+    assert.equal(d.querySelectorAll('.source-row').length,11);
+    assert.equal((form.elements.namedItem('drive') as HTMLTextAreaElement).value,'');
+  }finally{dom.window.close();}
 });
 
 

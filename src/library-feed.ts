@@ -4,22 +4,23 @@ import { escapeXml as e } from './opds';
 export const XML_TYPE = 'application/atom+xml;profile=opds-catalog';
 export interface ManagedFeed {
   libraryId: string; title: string; feedUrl: string; downloadUrl: string; self: string; start: string;
-  search: string; next?: string; folderKey: string; items: LibraryItem[];
+  search?: string; next?: string; description?: string; folderKey: string; items: (LibraryItem & { sourceId?: string; external?: boolean })[];
   sources?: { id: string; title: string; href: string }[];
+  externalDownloads?: Record<string, string>;
 }
 export function managedFeed(f: ManagedFeed, json: boolean): string {
   const type = json ? 'application/opds+json' : XML_TYPE;
   const links = [
     { rel: ['self'], href: f.self, type }, { rel: ['start'], href: f.start, type },
-    { rel: ['search'], href: f.search, type },
+    ...(f.search ? [{ rel: ['search'], href: f.search, type }] : []),
     ...(f.next ? [{ rel: ['next'], href: f.next, type }] : []),
   ];
   const folderUrl = (i: LibraryItem) => `${f.feedUrl}?folder=${i.ref}`;
-  const download = (i: LibraryItem) => `${f.downloadUrl}?ref=${i.ref}`;
+  const download = (i: LibraryItem & { sourceId?: string; external?: boolean }) => `${i.external && i.sourceId && f.externalDownloads?.[i.sourceId] || f.downloadUrl}?ref=${i.ref}`;
   const identifier = `urn:vbook:library:${f.libraryId}:${f.folderKey}`;
   const now = new Date().toISOString();
   if (json) return JSON.stringify({
-    metadata: { identifier, title: f.title, modified: now }, links,
+    metadata: { identifier, title: f.title, modified: now, ...(f.description ? {description:f.description} : {}) }, links,
     navigation: [
       ...(f.sources || []).map(source => ({ href: source.href, title: source.title, type: XML_TYPE, rel: ['subsection'] })),
       ...f.items.filter(i => i.isFolder).map(i => ({ href: folderUrl(i), title: i.title, type, rel: ['subsection'] })),
@@ -49,5 +50,5 @@ export function managedFeed(f: ManagedFeed, json: boolean): string {
       (i.coverUrl ? `<link rel="http://opds-spec.org/image" href="${e(i.coverUrl)}"/><link rel="http://opds-spec.org/image/thumbnail" href="${e(i.coverUrl)}"/>` : '') +
       `<link rel="http://opds-spec.org/acquisition" href="${e(download(i))}" type="${e(i.mimeType)}"${i.size ? ` length="${e(i.size)}"` : ''}/></entry>`;
   }).join('\n');
-  return `<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/"><id>${e(identifier)}</id><title>${e(f.title)}</title><updated>${now}</updated><author><name>VBook Library</name></author>${links.map(l => `<link rel="${l.rel[0]}" href="${e(l.href)}" type="${type}"/>`).join('')}${sourceEntries}${entries}</feed>`;
+  return `<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/"><id>${e(identifier)}</id><title>${e(f.title)}</title>${f.description ? `<subtitle>${e(f.description)}</subtitle>` : ''}<updated>${now}</updated><author><name>VBook Library</name></author>${links.map(l => `<link rel="${l.rel[0]}" href="${e(l.href)}" type="${type}"/>`).join('')}${sourceEntries}${entries}</feed>`;
 }

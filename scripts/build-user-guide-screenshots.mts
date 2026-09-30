@@ -25,7 +25,8 @@ function notice(html: string, text: string): string {
 
 let create = notice(base('light'), 'Dữ liệu minh họa — tất cả đường dẫn, tên và tài khoản trong hình đều là giả.');
 create = create
-  .replace('<textarea name="drive" rows="4" maxlength="12000" placeholder="https://catalog-one.example/opds&#10;https://catalog-two.example/feed.xml"></textarea>', '<textarea name="drive" rows="4" maxlength="12000">https://catalog-one.example/opds\nhttps://catalog-two.example/feed.xml</textarea>')
+  .replace('<textarea name="drive" rows="4" maxlength="210000" aria-describedby="create-url-count" placeholder="https://catalog-one.example/opds&#10;https://catalog-two.example/feed.xml"></textarea>', '<textarea name="drive" rows="4" maxlength="210000" aria-describedby="create-url-count">https://catalog-one.example/opds\nhttps://catalog-two.example/feed.xml</textarea>')
+  .replace('Đã nhập 0 / 99 URL OPDS · 0 / 1 link Drive', 'Đã nhập 2 / 99 URL OPDS · 0 / 1 link Drive')
   .replace('<input name="name"', '<input name="name" value="Góc sách mẫu"')
   .replace('<input name="username"', '<input name="username" value="nguoidung_mau"')
   .replace('<input name="password" type="password"', '<input name="password" type="password" value="MatKhauMau-1234"');
@@ -74,7 +75,9 @@ writeFileSync(join(output, 'connect-vbook.html'), connect);
 
 let sources = dashboard('light', false)
   .replace('</body>', '<script>document.querySelector("#sources").showModal()</script></body>')
-  .replace('<textarea name="urls" rows="4" maxlength="12000" required placeholder="https://catalog.example/opds&#10;https://books.example/feed.xml"></textarea>', '<textarea name="urls" rows="4" maxlength="12000" required>https://catalog.example/opds\nhttps://books.example/feed.xml</textarea>')
+  .replace('<textarea name="urls" rows="4" maxlength="210000" aria-describedby="source-url-count" required placeholder="https://catalog.example/opds&#10;https://books.example/feed.xml"></textarea>', '<textarea name="urls" rows="4" maxlength="210000" aria-describedby="source-url-count" required>https://catalog.example/opds\nhttps://books.example/feed.xml</textarea>')
+  .replace('Đã nhập 0 / 99 URL OPDS', 'Đã nhập 2 / 99 URL OPDS')
+  .replace('<p id="source-check-status" class="muted" role="status" aria-live="polite"></p>', '<p id="source-check-status" class="muted" role="status" aria-live="polite">Đã kiểm tra 2 / 2 nguồn · 0 nguồn lỗi.</p>')
   .replace('<div id="source-list" class="source-list" aria-live="polite"><p class="muted">Chưa có nguồn OPDS.</p></div>', `<div id="source-list" class="source-list" aria-live="polite">
     <article class="source-row"><div><h3>Kho sách cộng đồng</h3><p>catalog.example · Có tài khoản nguồn</p><p>https://vbook-opds.example/o/THUVIENMAU12/s/NGUONMAU001</p></div><div class="source-actions"><label class="source-enabled"><input type="checkbox" checked> Đang bật</label><button class="icon-button" aria-label="Sao chép link"><svg class="icon" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button><button class="danger icon-button" aria-label="Xóa"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></button></div></article>
     <article class="source-row"><div><h3>Catalog sách mẫu</h3><p>books.example · Nguồn công khai</p><p>https://vbook-opds.example/o/THUVIENMAU12/s/NGUONMAU002</p></div><div class="source-actions"><label class="source-enabled"><input type="checkbox" checked> Đang bật</label><button class="icon-button" aria-label="Sao chép link"><svg class="icon" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button><button class="danger icon-button" aria-label="Xóa"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></button></div></article>
