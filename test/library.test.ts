@@ -179,7 +179,7 @@ test('external OPDS sources aggregate behind short authenticated proxy links', a
   assert.equal(added.status,201);const data=await added.json() as any;assert.equal(data.sources.length,1);
   const source=data.sources[0];assert.match(source.shortId,/^[\w-]{12}$/);assert.equal(source.name,'Kho sách được chia sẻ');
   assert.equal(source.host,'catalog.example');assert.equal(source.hasCredentials,true);assert.equal(source.url,'https://library.example/o/'+a.library.shortId+'/s/'+source.shortId);
-  assert.ok(!JSON.stringify(source).includes('source-secret'));assert.ok(!JSON.stringify(source).includes('/opds'));
+  assert.ok(!JSON.stringify(source).includes('source-secret'));assert.equal(source.sourceUrl,'https://catalog.example/opds');
   const stored=h.db.sqlite.prepare('SELECT config_token FROM opds_sources').get()!.config_token as string;
   assert.ok(!stored.includes('catalog.example'));assert.ok(!stored.includes('source-secret'));
 
@@ -252,7 +252,9 @@ test('aggregate shelf keeps working sources visible when another feed becomes un
     const sources=(await(await h.req(base(a)+'/sources')).json() as any).sources;
     const checks=await h.req(base(a)+'/sources/check','POST',{ids:sources.map((source:any)=>source.id)});
     assert.equal(checks.status,200);
-    assert.deepEqual((await checks.json() as any).checks.map((item:any)=>item.ok).sort(),[false,true]);
+    const results=(await checks.json() as any).checks;
+    assert.deepEqual(results.map((item:any)=>item.ok).sort(),[false,true]);
+    assert.match(results.find((item:any)=>!item.ok).error,/HTTP 503/);
     const response=await h.req('/o/'+a.library.shortId,'GET',undefined,{...auth(a),Accept:'application/opds+json'});
     assert.equal(response.status,200);
     const feed=await response.json() as any;
@@ -402,6 +404,26 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     assert.deepEqual(errors,[]);
   } finally {dom.window.close();}
 });
+test('reopened library identifies a failed saved OPDS URL and lets owner remove it',async()=>{
+  const h=harness();const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Nguồn lỗi',drive:'https://catalog.example/broken',username:'owner',password:'long-password-123'}));
+  const dom=new JSDOM(libraryHtml,{url:'https://library.example/?library='+a.library.id,runScripts:'outside-only'}),w=dom.window,d=w.document;
+  w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.confirm=()=>true;
+  w.AbortController=globalThis.AbortController as any;
+  w.fetch=(async(path:string,init:any={})=>path.endsWith('/scan')?new Response('<!DOCTYPE html><title>Upstream error</title>',{status:502,headers:{'Content-Type':'text/html'}}):app.request('https://library.example'+path,{...init,headers:{Cookie:h.cookie,...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any)) as any;
+  try{
+    w.eval(libraryClient);
+    for(let i=0;i<300&&!d.querySelector('#notice')!.textContent!.includes('https://catalog.example/broken');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.match(d.querySelector('#notice')!.textContent!,/https:\/\/catalog\.example\/broken/);
+    assert.match(d.querySelector('#source-list')!.textContent!,/URL gốc: https:\/\/catalog\.example\/broken/);
+    assert.match(d.querySelector('#source-list')!.textContent!,/Lỗi: Máy chủ phản hồi HTTP 502/);
+    assert.ok(!d.querySelector('#notice')!.textContent!.includes('Unexpected token'));
+    assert.ok(d.querySelector('#source-list [data-source-delete]')!.textContent!.includes('Xóa link lỗi'));
+    (d.querySelector('#source-list [data-source-delete]') as HTMLButtonElement).click();
+    for(let i=0;i<300&&d.querySelectorAll('#source-list .source-row').length;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal(d.querySelectorAll('#source-list .source-row').length,0);
+  }finally{dom.window.close();}
+});
+
 test('URL counters show unique links and the source form adds more than ten in batches',async()=>{
   const h=harness(),a=await h.create();
   const dom=new JSDOM(libraryHtml,{url:'https://library.example/',runScripts:'outside-only'}),w=dom.window,d=w.document;
@@ -436,7 +458,11 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.equal(d.querySelector('#source-url-count')!.textContent,'Đã nhập 0 / 99 URL OPDS');
     assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,11);
     assert.equal((d.querySelector('#delete-selected-sources') as HTMLButtonElement).textContent,'Xóa hàng loạt (0)');
-    assert.ok(!(await(await h.req(base(a)+'/sources')).json() as any).sources[0].sourceUrl,'saved feed URL stays private in the source list');
+    assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources[0].sourceUrl,'https://catalog.example/opds?item=0');
+    assert.ok(d.querySelector('#source-list')!.textContent!.includes('https://catalog.example/opds?item=0'));
+    assert.equal(d.querySelector('.source-bulk-actions')!.children.length,3);
+    assert.equal((d.querySelector('.source-bulk-actions')!.firstElementChild as HTMLElement).id,'check-sources');
+    assert.equal((d.querySelector('.source-bulk-actions')!.lastElementChild as HTMLElement).id,'delete-selected-sources');
     assert.deepEqual((await(await h.req(base(a)+'/sources/match','POST',{urls:['https://catalog.example/opds?item=0','https://catalog.example/new']})).json() as any).existing,[0]);
     source.value=Array.from({length:11},(_,i)=>`https://catalog.example/opds?item=${i}`).join('\n');
     form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));

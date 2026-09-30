@@ -371,6 +371,7 @@ async function listSources(c: C) {
       id: row.id, shortId: row.short_id, name: row.name, host: safeOpdsUrl(config.url).host,
       enabled: Boolean(row.enabled), hasCredentials: Boolean(config.username || config.password),
       url: `${new URL(c.req.url).origin}/o/${lib.short_id}/s/${row.short_id}`,
+      sourceUrl: config.url,
     };
   }));
 }
@@ -394,7 +395,7 @@ api.post('/api/libraries/:id/sources/check', async c => {
   const byId = new Map(rows.map(row => [row.id, row]));
   const checks = await Promise.all(ids.map(async id => {
     try { await validateOpds(await sourceConfig(c.env.MASK_SECRET, byId.get(id)!)); return {id,ok:true}; }
-    catch { return {id,ok:false}; }
+    catch (error) { return {id,ok:false,error: error instanceof Error ? error.message : 'Không đọc được nguồn OPDS.'}; }
   }));
   return c.json({checks});
 });

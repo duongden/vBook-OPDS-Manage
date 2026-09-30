@@ -88,6 +88,7 @@ export async function scanOpdsSource(secret: string, libraryId: string, row: Opd
   const length = Number(response.headers.get('content-length') || 0); if (length > 2_000_000) fail(413, 'Feed OPDS lớn hơn 2 MB.');
   const bytes = await response.arrayBuffer(); if (bytes.byteLength > 2_000_000) fail(413, 'Feed OPDS lớn hơn 2 MB.');
   const body = new TextDecoder().decode(bytes), contentType = response.headers.get('content-type') || '';
+  if (!body.trimStart().startsWith('{') && !/<(?:[\w-]+:)?(?:feed|entry)\b/i.test(body)) fail(503, 'Nguồn không trả về Atom/OPDS XML hợp lệ.');
   let feed: ParsedFeed;
   try { feed = contentType.includes('json') || body.trimStart().startsWith('{') ? parseJson(body) : parseXml(body); }
   catch { return fail(503, 'Không đọc được danh sách sách từ nguồn OPDS.'); }
