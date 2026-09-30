@@ -318,7 +318,8 @@ dialog #notice { position: sticky; top: 0; z-index: 2; max-height: min(35dvh, 18
 #source-import-errors:empty { display: none; }
 .source-error-url { display: block; overflow-wrap: anywhere; word-break: break-word; }
 .source-bulk-actions { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-4) 0; }
-.source-bulk-actions label { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
+.source-bulk-actions label { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
+.source-bulk-actions label input { flex: none; margin: 0; }
 .source-bulk-actions button { padding-inline: 10px; white-space: nowrap; }
 .source-bulk-actions #delete-selected-sources { margin-left: auto; }
 @media (max-width: 480px) { .source-bulk-actions { gap: 5px; } .source-bulk-actions button { padding-inline: 7px; font-size: 0; } .source-bulk-actions label { font-size: 12px; } .source-bulk-actions #check-sources::after { content: 'Kiểm tra'; font-size: 12px; } .source-bulk-actions #delete-selected-sources::after { content: 'Xóa (' attr(data-count) ')'; font-size: 12px; } }
