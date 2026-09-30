@@ -11,7 +11,8 @@ function applyTheme(theme,persist=false){document.documentElement.dataset.theme=
 let theme=savedTheme();applyTheme(theme);
 let library=null,csrf='',pageItems=new Map(),scanItems=new Map(),selected=new Set(),view='grid',scanMode=false;
 let trail=[],nextCursor=null,busy=false,editing=null,scanQueue=[],scanSeen=new Set(),scanRunning=false,scanComplete=false,scanPages=0,scanController=null;
-let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0,sources=[],sourceChecks=new Map(),sourceImportErrors=[];
+let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0,sources=[],sourceChecks=new Map(),sourceImportErrors=[],sourceCheckComplete=false,bulkDeletingFailed=false;
+const deleteFailedSourcesButton=document.createElement('button');deleteFailedSourcesButton.id='delete-failed-sources';deleteFailedSourcesButton.type='button';deleteFailedSourcesButton.className='danger';deleteFailedSourcesButton.hidden=true;$('#source-check-status').after(deleteFailedSourcesButton);
 const svgIcon=name=>({
  copy:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
  trash:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>',
@@ -41,6 +42,8 @@ function renderConnection(){
 }
 function renderSources(){
  $('#source-count').textContent=String(sources.length+(library?.hasDrive?1:0));
+ const failedCount=sources.filter(source=>sourceChecks.get(source.id)===false).length,bulkButton=$('#delete-failed-sources');
+ bulkButton.hidden=!sourceCheckComplete||!failedCount;bulkButton.disabled=bulkDeletingFailed;bulkButton.textContent='Xóa tất cả '+failedCount+' link lỗi';
  $('#drive-status').textContent=library?.hasDrive?'Đã kết nối một thư mục Drive. Dán link mới bên dưới để thay thế.':'Chưa kết nối thư mục Drive.';
  $('#drive-save').textContent=library?.hasDrive?'Thay thư mục Drive':'Thêm thư mục Drive';$('#drive-remove').hidden=!library?.hasDrive;
  $('#source-list').innerHTML=sources.length?sources.map(source=>{
@@ -51,16 +54,17 @@ function renderSources(){
 async function loadSources(){
  if(!library)return;sources=(await api(endpoint('/sources'))).sources;renderSources();
 }
-async function enter(data){
- library=data.library;csrf=data.csrf;sourceChecks.clear();pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
+async function enter(data,autoScan=true){
+ library=data.library;csrf=data.csrf;sourceChecks.clear();sourceCheckComplete=false;pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
  $('#welcome').hidden=true;$('#dashboard').hidden=false;$('#logout').hidden=false;$('#account-button').hidden=false;$('#library-name').textContent=library.name;
  history.replaceState(null,'','/?library='+encodeURIComponent(library.id));
  $('#account-info').textContent='Mã thư viện: '+library.id+' · Tên đăng nhập: '+library.username;
  $('#scan-status').textContent='Chưa quét toàn thư viện. Số liệu hiện chỉ thuộc dữ liệu đã tải.';scanControls();
  notice('');await Promise.all([browse(false),loadSources()]);if(data.opds||data.recoveryCode)showSecrets(data);
+ if(autoScan&&!library.hasDrive&&sources.some(source=>source.enabled))startScan(true);
 }
 function leave(){
- pauseScan();requestEpoch++;library=null;csrf='';activeOpds=null;recoveryCode='';sources=[];sourceChecks.clear();pageItems.clear();scanItems.clear();selected.clear();editing=null;scanQueue=[];scanSeen.clear();
+ pauseScan();requestEpoch++;library=null;csrf='';activeOpds=null;recoveryCode='';sources=[];sourceChecks.clear();sourceCheckComplete=false;sourceImportErrors=[];renderImportErrors();pageItems.clear();scanItems.clear();selected.clear();editing=null;scanQueue=[];scanSeen.clear();
  document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('#secret-values').replaceChildren();$('#items').replaceChildren();$('#edit-form').reset();
  $('#welcome').hidden=false;$('#dashboard').hidden=true;$('#logout').hidden=true;$('#account-button').hidden=true;tab('login');
 }
@@ -115,13 +119,24 @@ async function browse(append){
 }
 function scanControls(){$('#scan-pause').hidden=!scanRunning;$('#scan-resume').hidden=scanRunning||!scanQueue.length;$('#scan-results').hidden=!scanPages;$('#scan-start').disabled=scanRunning;}
 function pauseScan(){scanEpoch++;scanRunning=false;if(scanController)scanController.abort();scanController=null;scanControls();}
+function startScan(auto=false){
+ if(!auto&&scanPages&&!confirm('Quét lại toàn thư viện từ đầu?'))return;
+ pauseScan();scanItems.clear();scanSeen.clear();scanQueue=[...(library.hasDrive?[{}]:[]),...sources.filter(source=>source.enabled).map(source=>({sourceId:source.id}))];scanPages=0;scanComplete=false;
+ if(!scanQueue.length){$('#scan-status').textContent='Chưa có nguồn Drive hoặc OPDS đang bật để quét.';return;}
+ $('#scan-status').textContent='Đang tải sách từ '+sources.filter(source=>source.enabled).length+' nguồn OPDS...';scanLoop();
+}
 async function scanLoop(){
  if(scanRunning||!scanQueue.length)return;scanRunning=true;scanMode=true;requestEpoch++;busy=false;selected.clear();scanControls();
  const currentLibrary=library.id,epoch=++scanEpoch;
  try{
   while(epoch===scanEpoch&&scanRunning&&scanQueue.length&&library&&library.id===currentLibrary){
    const job=scanQueue[0];scanController=new AbortController();
-   const data=await api(endpoint('/scan'),'POST',{...(job.sourceId?{sourceId:job.sourceId}:{}),...(job.ref?(job.sourceId?{target:job.ref}:{folder:job.ref}):{}),...(job.cursor?{cursor:job.cursor}:{})},scanController.signal);
+   let data;
+   try{data=await api(endpoint('/scan'),'POST',{...(job.sourceId?{sourceId:job.sourceId}:{}),...(job.ref?(job.sourceId?{target:job.ref}:{folder:job.ref}):{}),...(job.cursor?{cursor:job.cursor}:{})},scanController.signal);}
+   catch(error){
+    if(error.name==='AbortError'||!job.sourceId)throw error;
+    scanQueue.shift();$('#scan-status').textContent='Không đọc được một nguồn OPDS: '+error.message+' Đang tiếp tục quét các nguồn khác.';notice($('#scan-status').textContent,true);continue;
+   }
    if(epoch!==scanEpoch||!scanRunning||!library||library.id!==currentLibrary)break;
    scanSeen.add(data.folderKey);scanQueue.shift();scanPages++;
    data.items.forEach(b=>{
@@ -152,7 +167,7 @@ function splitUrls(value){return String(value||'').split(/\r?\n/).map(url=>url.t
 function isDriveInput(value){if(!value.includes('://'))return true;try{return new URL(value).hostname==='drive.google.com';}catch{return false;}}
 function pastedUrls(value,max=MAX_PASTED_OPDS_URLS){const urls=[...new Set(splitUrls(value))];if(urls.length>max)throw new Error(max===MAX_PASTED_OPDS_URLS?'Mỗi lần nhập tối đa 99 URL OPDS, mỗi URL trên một dòng.':'Mỗi lần nhập tối đa 99 URL OPDS và một link Drive, mỗi link trên một dòng.');return urls;}
 function renderImportErrors(){
- $('#source-import-errors').innerHTML=sourceImportErrors.map((item,index)=>'<article class="source-row"><div><strong>URL OPDS thứ '+item.index+'</strong><p class="error">'+escapeHtml(item.message)+'</p><code class="source-error-url">'+escapeHtml(item.url)+'</code></div><button type="button" class="danger" data-import-delete="'+index+'">Xóa link lỗi</button></article>').join('');
+ $('#source-import-errors').innerHTML=(sourceImportErrors.length>1?'<button type="button" class="danger" data-import-delete-all>Xóa tất cả '+sourceImportErrors.length+' link lỗi</button>':'')+sourceImportErrors.map((item,index)=>'<article class="source-row"><div><strong>URL OPDS thứ '+item.index+'</strong><p class="error">'+escapeHtml(item.message)+'</p><code class="source-error-url">'+escapeHtml(item.url)+'</code></div><button type="button" class="danger" data-import-delete="'+index+'">Xóa link lỗi</button></article>').join('');
 }
 function updateUrlCount(){
  const createLines=splitUrls($('#create textarea[name="drive"]').value),createUnique=[...new Set(createLines)],drive=createUnique.filter(isDriveInput).length,opds=createUnique.length-drive;
@@ -162,6 +177,7 @@ function updateUrlCount(){
 }
 ['#create textarea[name="drive"]','#source-form textarea[name="urls"]'].forEach(selector=>$(selector).addEventListener('input',updateUrlCount));updateUrlCount();
 async function addSourceBatches(urls,username='',password='',offset=0){
+ sourceCheckComplete=false;sourceChecks.clear();renderSources();
  const failed=[];let added=0;
  for(let i=0;i<urls.length;i+=OPDS_BATCH_SIZE){
   const batch=urls.slice(i,i+OPDS_BATCH_SIZE);
@@ -187,6 +203,10 @@ async function hideExternalBooks(books){
 }
 document.addEventListener('click',async event=>{
  const button=event.target.closest('button');if(!button)return;
+ if(button.hasAttribute('data-import-delete-all')){
+  const failed=new Set(sourceImportErrors.map(item=>item.url)),input=$('#source-form textarea[name="urls"]'),count=failed.size;
+  input.value=splitUrls(input.value).filter(url=>!failed.has(url)).join('\n');sourceImportErrors=[];updateUrlCount();notice('Đã xóa '+count+' link lỗi khỏi ô nhập. Các nguồn đã thêm vẫn được giữ.');return;
+ }
  if(button.dataset.importDelete!==undefined){
   const item=sourceImportErrors[Number(button.dataset.importDelete)];if(!item)return;
   const input=$('#source-form textarea[name="urls"]');input.value=splitUrls(input.value).filter(url=>url!==item.url).join('\n');
@@ -207,11 +227,12 @@ document.addEventListener('change',event=>{if(event.target.dataset.select){const
   if(opds.length>MAX_PASTED_OPDS_URLS)throw new Error('Tối đa 99 URL OPDS khi tạo thư viện.');
   notice(opds.length?'Đang kiểm tra '+Math.min(opds.length,OPDS_BATCH_SIZE)+' URL OPDS đầu và tạo thư viện...':'Đang tạo thư viện...');
   const data=await api('/api/libraries','POST',{...values,drive:[...drive,...opds.slice(0,OPDS_BATCH_SIZE)].join('\n')});
-  form.reset();updateUrlCount();await enter(data);
+  form.reset();updateUrlCount();await enter(data,false);
   if(opds.length>OPDS_BATCH_SIZE){
    try{await addSourceBatches(opds.slice(OPDS_BATCH_SIZE),'','',OPDS_BATCH_SIZE);$('#source-progress').textContent='';notice('Đã thêm và kiểm tra '+opds.length+' nguồn OPDS.');}
-   catch(error){$('#source-form').elements.urls.value=error.remainingUrls.join('\n');updateUrlCount();notice('Thư viện đã tạo. Đã thêm '+(OPDS_BATCH_SIZE+error.addedCount)+' / '+opds.length+' nguồn OPDS. Mở Nguồn sách để thử lại các URL còn trong ô nhập. '+error.message,true);}
+   catch(error){$('#source-form').elements.urls.value=error.remainingUrls.join('\n');sourceImportErrors=error.failed||[];updateUrlCount();notice('Thư viện đã tạo. Đã thêm '+(OPDS_BATCH_SIZE+error.addedCount)+' / '+opds.length+' nguồn OPDS. Mở Nguồn sách để thử lại các URL còn trong ô nhập. '+error.message,true);}
   }
+  if(!library.hasDrive&&sources.some(source=>source.enabled))startScan(true);
   return;
  }
  const data=await api(id==='login'?'/api/session':'/api/recovery','POST',values);form.reset();await enter(data);
@@ -230,13 +251,13 @@ $('#drive-remove').addEventListener('click',async()=>{if(!library.hasDrive||!con
 $('#source-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{
  const values=Object.fromEntries(new FormData(f)),urls=pastedUrls(values.urls);
  if(!urls.length)throw new Error('Nhập ít nhất một URL OPDS.');
- try{sourceImportErrors=[];renderImportErrors();$('#source-progress').textContent='Đang kiểm tra 0 / '+urls.length+' URL OPDS.';notice($('#source-progress').textContent);await addSourceBatches(urls,values.username||'',values.password||'');f.reset();updateUrlCount();$('#source-progress').textContent='Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.';notice($('#source-progress').textContent);}
- catch(error){if(error.remainingUrls)f.elements.urls.value=error.remainingUrls.join('\n');sourceImportErrors=error.failed||[];updateUrlCount();error.message='Đã thêm '+(error.addedCount||0)+' / '+urls.length+' nguồn OPDS. '+(error.remainingUrls?'Các URL lỗi/chưa xử lý được giữ trong ô nhập. ':'')+error.message;throw error;}
+ try{sourceImportErrors=[];renderImportErrors();$('#source-progress').textContent='Đang kiểm tra 0 / '+urls.length+' URL OPDS.';notice($('#source-progress').textContent);await addSourceBatches(urls,values.username||'',values.password||'');f.reset();updateUrlCount();$('#source-progress').textContent='Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.';notice($('#source-progress').textContent);if(!library.hasDrive)startScan(true);}
+ catch(error){if(error.remainingUrls)f.elements.urls.value=error.remainingUrls.join('\n');sourceImportErrors=error.failed||[];updateUrlCount();error.message='Đã thêm '+(error.addedCount||0)+' / '+urls.length+' nguồn OPDS. '+(error.remainingUrls?'Các URL lỗi/chưa xử lý được giữ trong ô nhập. ':'')+error.message;if(error.addedCount&&!library.hasDrive)startScan(true);throw error;}
  });});
 $('#check-sources').addEventListener('click',async()=>{
  const button=$('#check-sources'),status=$('#source-check-status'),ids=sources.map(source=>source.id);
  if(!ids.length){status.textContent='Chưa có nguồn OPDS để kiểm tra.';notice(status.textContent);return;}
- button.disabled=true;sourceChecks.clear();renderSources();
+ button.disabled=true;sourceCheckComplete=false;sourceChecks.clear();renderSources();
  status.textContent='Đang kiểm tra 0 / '+ids.length+' nguồn OPDS.';notice(status.textContent);
  try{
   for(let i=0;i<ids.length;i+=5){
@@ -244,8 +265,22 @@ $('#check-sources').addEventListener('click',async()=>{
    data.checks.forEach(check=>sourceChecks.set(check.id,check.ok));renderSources();
    const failed=[...sourceChecks.values()].filter(ok=>!ok).length;status.textContent='Đã kiểm tra '+Math.min(i+5,ids.length)+' / '+ids.length+' nguồn · '+failed+' nguồn lỗi.'+(failed?' Xem dòng lỗi để tắt hoặc xóa link.':'');notice(status.textContent,Boolean(failed));
   }
+  sourceCheckComplete=true;renderSources();
  }catch(error){status.textContent='Kiểm tra chưa hoàn tất. '+error.message;notice(error.message,true);}
  finally{button.disabled=false;}
+});
+$('#delete-failed-sources').addEventListener('click',async()=>{
+ const ids=sources.filter(source=>sourceChecks.get(source.id)===false).map(source=>source.id);
+ if(!sourceCheckComplete||!ids.length||bulkDeletingFailed||!confirm('Xóa '+ids.length+' nguồn OPDS đã kiểm tra bị lỗi khỏi thư viện? Sách trên máy chủ nguồn không bị xóa.'))return;
+ bulkDeletingFailed=true;renderSources();let deleted=0,errors=0;
+ for(const id of ids){
+  try{const data=await api(endpoint('/sources/'+id),'DELETE');sources=data.sources;sourceChecks.delete(id);deleted++;}
+  catch{errors++;}
+  $('#source-check-status').textContent='Đang xóa '+(deleted+errors)+' / '+ids.length+' nguồn lỗi · đã xóa '+deleted+'.';renderSources();
+ }
+ bulkDeletingFailed=false;renderSources();
+ const message='Đã xóa '+deleted+' / '+ids.length+' nguồn OPDS lỗi.'+(errors?' '+errors+' nguồn chưa xóa được; thử lại.':' Sách ở nguồn gốc được giữ nguyên.');
+ $('#source-check-status').textContent=message;notice(message,Boolean(errors));
 });
 $('#source-list').addEventListener('click',async event=>{
  const copy=event.target.closest('[data-source-copy]');if(copy){const source=sources.find(item=>item.id===copy.dataset.sourceCopy);if(!source)return;try{await navigator.clipboard.writeText(source.url);notice('Đã sao chép link nguồn OPDS.');}catch{notice('Không thể sao chép tự động.',true);}return;}
@@ -255,7 +290,7 @@ $('#source-list').addEventListener('change',async event=>{const input=event.targ
 $('#search').addEventListener('input',render);['language','format','sort'].forEach(id=>$('#'+id).addEventListener('change',render));
 ['grid','table'].forEach(mode=>$('#view-'+mode).addEventListener('click',()=>{view=mode;['grid','table'].forEach(m=>$('#view-'+m).setAttribute('aria-pressed',String(m===mode)));render();}));
 $('#load-more').addEventListener('click',()=>{if(!busy)browse(true);});$('#reload-folder').addEventListener('click',()=>{pauseScan();trail=[];browse(false);});
-$('#scan-start').addEventListener('click',()=>{if(scanPages&&!confirm('Quét lại toàn thư viện từ đầu?'))return;scanItems.clear();scanSeen.clear();scanQueue=[...(library.hasDrive?[{}]:[]),...sources.filter(source=>source.enabled).map(source=>({sourceId:source.id}))];scanPages=0;scanComplete=false;if(!scanQueue.length){$('#scan-status').textContent='Chưa có nguồn Drive hoặc OPDS đang bật để quét.';return;}scanLoop();});
+$('#scan-start').addEventListener('click',()=>startScan());
 $('#scan-pause').addEventListener('click',()=>{pauseScan();$('#scan-status').textContent='Đã tạm dừng. Kết quả chưa đầy đủ; có thể tiếp tục trong phiên trang này.';});$('#scan-resume').addEventListener('click',scanLoop);
 $('#scan-results').addEventListener('click',()=>{requestEpoch++;busy=false;scanMode=true;selected.clear();fillFilters();render();});
 $('#select-all').addEventListener('change',event=>{filtered().filter(b=>!b.isFolder).forEach(b=>event.target.checked?selected.add(b.key):selected.delete(b.key));render();});

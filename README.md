@@ -1,4 +1,4 @@
-# VBook Library / OPDS Gateway — v1.9.1
+# VBook Library / OPDS Gateway — v1.9.2
 
 Giao diện quản lý thư viện Google Drive và các catalog OPDS được chia sẻ dành cho vBook. Web có thể gộp hai loại nguồn vào một link OPDS ngắn, có tài khoản riêng.
 
@@ -91,14 +91,16 @@ Mã khôi phục và mật khẩu OPDS chỉ hiển thị khi vừa được c�
 
 Trong trang quản lý, bấm **Nguồn sách**. Phần **Google Drive** cho phép thêm thư mục Drive vào catalog hiện tại, thay bằng thư mục khác hoặc gỡ nguồn Drive mà không cần đăng xuất. Khi thay đổi, dán link thư mục hoặc Folder ID; file trên Drive không bị chỉnh sửa hay xóa.
 
-Ở phần **Nguồn OPDS**, dán mỗi URL trên một dòng; mỗi lần có thể dán từ 1 đến 99 link. Dòng trùng chỉ được tính và thêm một lần. Sau khi bấm **Thêm và kiểm tra nguồn**, hệ thống gửi từng nhóm tối đa 10 link đến API. Nếu một link trong nhóm lỗi, giao diện thử riêng từng link trong nhóm, tiếp tục xử lý các nhóm sau, rồi báo tổng số nguồn đã thêm. Mỗi link lỗi được hiện đầy đủ cùng lý do và nút **Xóa link lỗi**; chỉ các link lỗi hoặc chưa xử lý còn lại trong ô nhập. Link đã thêm không cần nhập lại. Khi tạo thư viện bằng hơn 10 link, thư viện có thể đã được tạo trước khi nhóm sau gặp lỗi: hãy lưu mã thư viện/mã khôi phục đang hiển thị, rồi vào **Nguồn sách** để tiếp tục.
+Ở phần **Nguồn OPDS**, dán mỗi URL trên một dòng; mỗi lần có thể dán từ 1 đến 99 link. Dòng trùng chỉ được tính và thêm một lần. Sau khi bấm **Thêm và kiểm tra nguồn**, hệ thống gửi từng nhóm tối đa 10 link đến API. Nếu một link trong nhóm lỗi, giao diện thử riêng từng link trong nhóm, tiếp tục xử lý các nhóm sau, rồi báo tổng số nguồn đã thêm. Mỗi link lỗi được hiện đầy đủ cùng lý do và nút **Xóa link lỗi**; khi có nhiều link lỗi, nút **Xóa tất cả link lỗi** gỡ chúng khỏi ô nhập một lần. Chỉ các link lỗi hoặc chưa xử lý còn lại trong ô; link đã thêm không cần nhập lại. Khi tạo thư viện bằng hơn 10 link, thư viện có thể đã được tạo trước khi nhóm sau gặp lỗi: hãy lưu mã thư viện/mã khôi phục đang hiển thị, rồi vào **Nguồn sách** để tiếp tục.
 
 Trong vBook, **Kệ tổng hợp** hiển thị sách từ các nguồn OPDS đang bật trong cùng một kệ. Gateway lần theo các trang kế tiếp và thư mục con của từng feed qua phân trang OPDS; nguồn tắt hoặc sách đã loại khỏi catalog không xuất hiện. Nếu thư viện không có Drive, link OPDS của thư viện mở thẳng kệ này. Nếu có Drive, kệ nằm trong catalog cùng với sách Drive. Link Discord hoặc trang HTML thường không phải feed OPDS và sẽ bị từ chối khi kiểm tra nguồn.
 
 - Nguồn công khai: để trống username và mật khẩu.
 - Nguồn có Basic Auth: nhập tài khoản mà chủ nguồn đã cấp. Một lần thêm dùng chung tài khoản cho các URL trong ô.
 - Sau khi thêm, dùng công tắc để bật/tắt nguồn, biểu tượng sao chép để lấy link ngắn riêng, hoặc biểu tượng thùng rác để gỡ nguồn khỏi thư viện. Thao tác này không xóa sách ở máy chủ nguồn.
-- Bấm **Kiểm tra link đã lưu** để kiểm tra lại từng nguồn. Giao diện báo số nguồn đã kiểm tra và số lỗi. Dòng không đọc được sẽ hiện lỗi cùng nút **Xóa link lỗi**; có thể tắt nguồn trước nếu chỉ muốn tạm bỏ qua. Kệ tổng hợp tiếp tục hiển thị sách từ nguồn còn hoạt động và báo số nguồn lỗi trong tiêu đề.
+- Bấm **Kiểm tra link đã lưu** để kiểm tra lại từng nguồn. Giao diện báo số nguồn đã kiểm tra và số lỗi. Dòng không đọc được sẽ hiện lỗi cùng nút **Xóa link lỗi**; sau khi kiểm tra xong, nút **Xóa tất cả N link lỗi** gỡ các nguồn lỗi đã xác định khỏi thư viện sau khi bạn xác nhận. Nút này chỉ xóa nguồn lỗi, giữ nguyên nguồn hoạt động và sách trên máy chủ nguồn. Có thể tắt nguồn lỗi trước nếu chỉ muốn tạm bỏ qua.
+
+Thư viện chỉ có OPDS sẽ tự quét sách khi mở trang quản lý hoặc sau khi thêm nguồn. Sách hiện dần cùng tiến trình **Đang quét**; nếu một nguồn lỗi trong lúc quét, các nguồn khác vẫn được xử lý. Bộ đếm **Nguồn sách** là số nguồn đã lưu, còn **Sách trong kết quả** là số sách đã tải trong lần quét hiện tại. Kệ tổng hợp trên vBook tiếp tục hiển thị sách từ nguồn hoạt động và báo số nguồn lỗi trong tiêu đề.
 
 | Thông báo | Ý nghĩa và cách xử lý |
 | --- | --- |
