@@ -1,11 +1,12 @@
 import { LibraryItem, fileExtension } from './library-data';
+import { inferBookLanguage } from './book-language';
 import { bookKey, fail, protectData, revealData } from './library-security';
 import { fetchOpds, OpdsSourceRow, safeOpdsUrl, sourceConfig } from './opds-source';
 
 interface ParsedLink { href: string; rel: string[]; type: string; length?: string }
 interface ParsedBook { id: string; title: string; author: string; language: string; category: string; description: string; modified: string; links: ParsedLink[]; cover: string }
 interface ParsedFeed { navigation: { title: string; href: string }[]; books: ParsedBook[]; next: string }
-export interface ScannedOpdsItem extends LibraryItem { external?: boolean; sourceId?: string; sourceName?: string }
+export interface ScannedOpdsItem extends LibraryItem { external?: boolean; sourceId?: string; sourceName?: string; languageInferred?: boolean }
 
 const decodeXml = (value: string) => value
   .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
@@ -103,7 +104,8 @@ export async function scanOpdsSource(secret: string, libraryId: string, row: Opd
     const key = await bookKey(secret, libraryId, `opds-book:${row.id}:${book.id || acquisition.href}`);
     const cover = resolved(book.cover, base)?.href || '', acquisitionUrl = resolved(acquisition.href, base);
     const ref = acquisitionUrl ? await protectData(secret, `opds-download:${libraryId}:${row.id}`, { url: acquisitionUrl.href }) : '';
-    books.push({ key, ref, name: book.title, title: book.title, opdsTitle: book.title, isFolder: false, format: formatOf(acquisition), mimeType: acquisition.type || 'application/octet-stream', size: acquisition.length, modified: safeDate(book.modified), author: book.author, language: book.language, category: book.category, description: book.description, coverUrl: cover, overrides: {}, sourceCoverUrl: cover, external: true, sourceId: row.id, sourceName: row.name });
+    const inferred = !book.language ? inferBookLanguage(book.title, book.description) : '';
+    books.push({ key, ref, name: book.title, title: book.title, opdsTitle: book.title, isFolder: false, format: formatOf(acquisition), mimeType: acquisition.type || 'application/octet-stream', size: acquisition.length, modified: safeDate(book.modified), author: book.author, language: book.language || inferred, languageInferred: Boolean(inferred), category: book.category, description: book.description, coverUrl: cover, overrides: {}, sourceCoverUrl: cover, external: true, sourceId: row.id, sourceName: row.name });
   }
   const next = resolved(feed.next, base);
   return {

@@ -124,6 +124,8 @@ Bạn có thể duyệt thư mục, đổi giữa kệ và bảng, tìm/lọc s�
 
 Nút **Kiểm tra toàn thư viện** cũng quét các nguồn OPDS đang bật. Sách từ OPDS có nhãn **OPDS**, được đưa vào thống kê và bộ lọc chung; metadata này do nguồn bên ngoài cung cấp nên không chỉnh sửa trên trang quản lý.
 
+Khi quét OPDS, nếu nguồn có mã ngôn ngữ thì thư viện dùng mã đó. Nếu nguồn bỏ trống, thư viện thử nhận diện từng sách từ tên và mô tả; kết quả hiện **(ước đoán)** trong kệ và có thể lọc theo ngôn ngữ. Sách không đủ dấu hiệu vẫn ở **Chưa rõ**. Cách này không đọc nội dung file và có thể không xác định được tên ngắn, tên phiên âm hoặc tiếng Việt không dấu. Quét lại để cập nhật kết quả sau khi nguồn đổi metadata.
+
 Mỗi dòng sách có nút tải. Với sách OPDS, nút thùng rác chỉ loại sách khỏi catalog tổng hợp của bạn; file ở nguồn gốc không bị xóa. Có thể dùng checkbox để chọn nhiều sách OPDS rồi bấm **Xóa sách OPDS đã chọn** ở hàng nút phía trên, cạnh **Nguồn sách** và **Kết nối vBook**. Nút chỉ hiện khi đã chọn sách OPDS. Nếu chọn lẫn sách Drive và OPDS, nút gán ngôn ngữ chỉ áp dụng cho sách Drive.
 
 Các thay đổi chỉ tác động đến thông tin hiển thị trong thư viện. Tên và nội dung file trên Drive không bị sửa.

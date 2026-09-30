@@ -9,6 +9,17 @@ import { extractFolderId } from '../src/drive';
 import { bookKey, hashPassword, checkPassword, seal } from '../src/library-security';
 import { libraryClient } from '../src/library-client';
 import { libraryCss, libraryHtml } from '../src/library-ui';
+import { inferBookLanguage } from '../src/book-language';
+
+test('classifies only sufficiently clear book text', () => {
+  assert.equal(inferBookLanguage('Sách tiếng Việt'), 'vi');
+  assert.equal(inferBookLanguage('The New Oxford Picture Dictionary'), 'en');
+  assert.equal(inferBookLanguage('日本語の本'), 'ja');
+  assert.equal(inferBookLanguage('한국어 책'), 'ko');
+  assert.equal(inferBookLanguage('中文书籍目录'), 'zh');
+  assert.equal(inferBookLanguage('Le Petit Prince'), '');
+  assert.equal(inferBookLanguage('Book 1'), '');
+});
 
 // Exercise actual migration/query SQL with SQLite, without emulating query results.
 class TestD1 {
@@ -185,7 +196,7 @@ test('external OPDS sources aggregate behind short authenticated proxy links', a
 
   const scanned=await h.req(base(a)+'/scan','POST',{sourceId:source.id});assert.equal(scanned.status,200);const scan=await scanned.json() as any;
   const scannedBook=scan.items.find((item:any)=>!item.isFolder),scannedFolder=scan.items.find((item:any)=>item.isFolder);
-  assert.equal(scannedBook.title,'Sách mẫu');assert.equal(scannedBook.format,'EPUB');assert.equal(scannedBook.external,true);assert.equal(scannedBook.sourceName,'Kho sách được chia sẻ');assert.ok(scannedBook.ref);
+  assert.equal(scannedBook.title,'Sách mẫu');assert.equal(scannedBook.format,'EPUB');assert.equal(scannedBook.external,true);assert.equal(scannedBook.sourceName,'Kho sách được chia sẻ');assert.equal(scannedBook.language,'vi');assert.equal(scannedBook.languageInferred,true);assert.ok(scannedBook.ref);
   assert.equal(scan.nextCursor,null);assert.ok(scannedFolder.ref);const child=await h.req(base(a)+'/scan','POST',{sourceId:source.id,target:scannedFolder.ref});assert.equal(child.status,200);const childData=await child.json() as any;assert.equal(childData.items.some((item:any)=>item.title==='Sách mẫu'),true);assert.equal(childData.nextCursor,null);assert.equal(childData.folderKey,scannedFolder.key);assert.equal(childData.items.find((item:any)=>item.isFolder).key,scannedFolder.key);
   const managedDownload=await h.req(base(a)+'/sources/'+source.id+'/download?ref='+encodeURIComponent(scannedBook.ref));assert.equal(managedDownload.status,200);assert.equal(await managedDownload.text(),'fake-epub');
   assert.equal((await h.req(base(a)+'/source-books/hide','POST',{books:[{sourceId:source.id,key:scannedBook.key}]})).status,200);
@@ -374,7 +385,7 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     search.value='';search.dispatchEvent(new w.Event('input'));assert.ok(!d.querySelector('#items')!.textContent!.includes('Tên sửa UI'));
     holdScan=true;click('#scan-start');await wait(()=>scanStarted);click('#scan-pause');holdScan=false;click('#scan-resume');
     await wait(()=>d.querySelector('#scan-status')!.textContent!.startsWith('Hoàn tất'));
-    assert.match(d.querySelector('#scan-status')!.textContent!,/7 file sách/);assert.ok(d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#items')!.textContent!.includes('OPDS'));
+    assert.match(d.querySelector('#scan-status')!.textContent!,/7 file sách/);assert.ok(d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#items')!.textContent!.includes('OPDS'));assert.ok(d.querySelector('#items')!.textContent!.includes('ước đoán'));
     const externalDelete=d.querySelector('[data-book-delete]') as HTMLButtonElement,externalDownload=d.querySelector('a[href*="/sources/"][href*="/download?ref="]');assert.ok(externalDelete);assert.ok(externalDownload);
     click('#select-all');assert.equal(d.querySelector('#selected-count')!.textContent,'7 đã chọn');assert.equal((d.querySelector('#bulk-apply') as HTMLButtonElement).disabled,false);assert.equal((d.querySelector('#bulk-delete-opds') as HTMLButtonElement).hidden,false);assert.equal(d.querySelector('#bulk-delete-opds')!.parentElement?.className,'section-actions');
     (d.querySelector('[data-book-delete]') as HTMLButtonElement).click();await wait(()=>!d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#notice')!.textContent!.includes('Đã loại sách'));
