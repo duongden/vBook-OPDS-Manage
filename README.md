@@ -1,6 +1,6 @@
 # VBook Library / OPDS Gateway — v1.9.5
 
-Giao diện quản lý thư viện Google Drive và các catalog OPDS được chia sẻ dành cho vBook. Web có thể gộp hai loại nguồn vào một link OPDS ngắn, có tài khoản riêng.
+Giao diện quản lý thư viện Google Drive và các catalog OPDS được chia sẻ dành cho vBook. Web có thể gộp hai loại nguồn vào một link OPDS ngắn dùng công khai. Tài khoản quản lý trên web vẫn riêng.
 
 **Không lưu nội dung sách, không ghi vào Drive.** D1 chỉ lưu tài khoản, cấu hình thư viện, phiên đăng nhập, metadata chỉnh sửa và danh sách sách OPDS bạn chọn ẩn. Nguồn Drive cần được chia sẻ “Bất kỳ ai có đường liên kết”; mật khẩu Gateway không thay đổi quyền truy cập file trên Google.
 
@@ -17,7 +17,7 @@ Giao diện quản lý thư viện Google Drive và các catalog OPDS được c
 - Quét toàn thư viện theo từng trang, không giới hạn 35 thư mục hoặc 3 cấp; tạm dừng/thử lại, đếm file duy nhất và hiển thị tiến độ.
 - Sửa tên hiển thị, tác giả, ngôn ngữ, thể loại, mô tả, URL bìa HTTPS; gán ngôn ngữ hàng loạt và khôi phục dữ liệu nguồn.
 - OPDS nhận metadata đã sửa, giữ đuôi file và MIME type. Download HTTP 302 sang Drive với `confirm=t`.
-- Tài khoản OPDS chỉ đọc, độc lập với tài khoản quản lý. Đổi mật khẩu, mã khôi phục một lần, tạo lại credential OPDS, xóa thư viện.
+- Link OPDS ngắn chỉ đọc và mở được không cần đăng nhập; tài khoản quản lý trên web vẫn có mật khẩu. Có thể đổi mật khẩu quản lý, khôi phục tài khoản hoặc xóa thư viện.
 - EPUB, CBZ, PDF, MOBI, CBR, TXT và các định dạng vốn có: AZW/AZW3, PRC, FB2/FB2.ZIP, DOC/DOCX, ZIP.
 
 ## Chạy cục bộ
@@ -77,15 +77,15 @@ https://drive.google.com/drive/folders/THU_MUC_MAU_123
 
 ### 2. Tạo thư viện
 
-Mở VBook Library, chọn **Tạo thư viện**. Dán **URL OPDS HTTPS thuần**, mỗi dòng một link; không dán cả cú pháp Markdown `[link](URL)` hoặc link trang chat như Discord. Có thể nhập tối đa **99 link OPDS khác nhau** và tùy chọn một link thư mục Drive. Bộ đếm ngay dưới ô nhập cho biết số link hợp lệ về mặt số lượng, dòng trùng và lúc vượt giới hạn; nội dung feed sẽ được kiểm tra khi bấm tạo. Nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự. Bạn có thể tự đặt **mật khẩu OPDS cho vBook** từ 6–64 ký tự ASCII không có khoảng trắng; để trống để hệ thống tạo mật khẩu ngẫu nhiên. Có thể để trống danh sách nguồn và thêm sau ở bước 3. Nếu nhập hơn 10 link, đợi thông báo hoàn tất tất cả nhóm trước khi chuyển trang; hộp thoại lưu mật khẩu OPDS chỉ mở sau bước này.
+Mở VBook Library, chọn **Tạo thư viện**. Dán **URL OPDS HTTPS thuần**, mỗi dòng một link; không dán cả cú pháp Markdown `[link](URL)` hoặc link trang chat như Discord. Có thể nhập tối đa **99 link OPDS khác nhau** và tùy chọn một link thư mục Drive. Bộ đếm ngay dưới ô nhập cho biết số link hợp lệ về mặt số lượng, dòng trùng và lúc vượt giới hạn; nội dung feed sẽ được kiểm tra khi bấm tạo. Nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự. Có thể để trống danh sách nguồn và thêm sau ở bước 3. Nếu nhập hơn 10 link, đợi thông báo hoàn tất tất cả nhóm trước khi chuyển trang; hộp thoại kết nối vBook mở sau bước này.
 
 Bấm **Tạo catalog tổng hợp** và lưu ngay:
 
 - **Mã thư viện ngắn** (12 ký tự) để đăng nhập lại; mã UUID cũ vẫn dùng được.
 - **Mã khôi phục** (16 ký tự khi cấp mới) để đặt lại mật khẩu quản lý.
-- **Mật khẩu OPDS** (mật khẩu tự đặt hoặc 16 ký tự ngẫu nhiên) để kết nối vBook.
+- **Link OPDS** trong hộp **Kết nối vBook** để chia sẻ kệ.
 
-Mã khôi phục và mật khẩu OPDS chỉ hiển thị khi vừa được cấp. Không nhập mật khẩu quản lý vào vBook.
+Mã khôi phục chỉ hiển thị khi vừa được cấp. Link OPDS công khai cho người có link; không nhập mật khẩu quản lý vào vBook.
 
 ### 3. Quản lý nguồn Drive và OPDS
 
@@ -147,22 +147,16 @@ Nếu thư viện chỉ có nguồn OPDS, khu vực sách Drive sẽ trống; đ
 
 Trong trang quản lý, bấm **Kết nối vBook**.
 
-Nếu muốn đổi mật khẩu OPDS, nhập mật khẩu mới vào ô trong hộp này rồi bấm **Đổi mật khẩu OPDS**. Để trống ô đó nếu muốn nhận mật khẩu ngẫu nhiên mới. Mật khẩu cũ hết hiệu lực sau khi đổi; cập nhật mật khẩu trong vBook. Mật khẩu quản lý thư viện không thay đổi.
-
-![Hộp kết nối vBook với dữ liệu giả](docs/images/ket-noi-vbook.png)
-
 1. Sao chép link OPDS.
 2. Trong vBook, mở **Extension Cloud → OPDS** và tạo nguồn mới.
 3. Dán link vào **URL danh mục**.
-4. Ở ô **Tên**, nhập `reader`. Ở ô **Mật khẩu**, nhập mật khẩu OPDS trong hộp **Kết nối vBook**. Có nút sao chép riêng cho từng giá trị.
+4. Để trống hai ô **Tên** và **Mật khẩu**, rồi kiểm tra kết nối.
 5. Lưu và mở kho sách.
 
 Ví dụ giả, không dùng để đăng nhập:
 
 ```text
 URL:      https://vbook-opds.example/o/THUVIENMAU12
-Username: reader
-Password: mat-khau-mau-khong-dung-that
 ```
 
 Đây là catalog tổng hợp: trang đầu chứa các nguồn OPDS đã bật cùng sách/thư mục Drive. Feed Drive tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi thay đổi nguồn hoặc metadata, hãy làm mới catalog trong vBook vì ứng dụng có thể giữ cache riêng.
@@ -171,9 +165,9 @@ Password: mat-khau-mau-khong-dung-that
 
 Để đăng nhập lại, nhập mã thư viện, tên đăng nhập và mật khẩu quản lý tại tab **Đăng nhập**. Nếu quên mật khẩu, dùng tab **Khôi phục** cùng mã khôi phục đã lưu.
 
-Lỗi `HTTP 404 — not an OPDS catalog at this URL` có thể do gõ nhầm số `0` thay cho chữ `o` trong `/o/`. Hãy sao chép nguyên URL từ **Kết nối vBook**. Khi chưa nhập tài khoản, URL đúng yêu cầu xác thực; mã thư viện và mã khôi phục không dùng trong vBook. Mật khẩu OPDS đã cấp trước bản cập nhật vẫn dùng được; nút **Đổi mật khẩu OPDS** nhận mật khẩu tự đặt hoặc cấp mật khẩu ngẫu nhiên 16 ký tự khi để trống, và thu hồi mật khẩu OPDS cũ.
+Lỗi `HTTP 404 — not an OPDS catalog at this URL` có thể do gõ nhầm số `0` thay cho chữ `o` trong `/o/`. Hãy sao chép nguyên URL từ **Kết nối vBook**. Link `/o/` mở được không cần tài khoản; mã thư viện và mã khôi phục không dùng trong vBook.
 
-Sau khi khôi phục, mã khôi phục, phiên đăng nhập và mật khẩu OPDS cũ hết hiệu lực. Hãy lưu thông tin mới và cập nhật vBook. Hệ thống không khôi phục qua email.
+Sau khi khôi phục, mã khôi phục và các phiên đăng nhập quản lý cũ hết hiệu lực. Link OPDS công khai vẫn giữ nguyên. Hệ thống không khôi phục qua email.
 
 ### Sáng/tối
 
@@ -184,13 +178,12 @@ Bấm biểu tượng mặt trăng hoặc mặt trời trên thanh đầu trang.
 | Hiện tượng | Cách xử lý |
 |---|---|
 | Không đọc được thư mục Drive | Kiểm tra quyền chia sẻ là **Bất kỳ ai có đường liên kết** và **Người xem** |
-| vBook báo sai tài khoản | Username OPDS luôn là `reader`; không dùng tên đăng nhập quản lý |
-| vBook báo sai mật khẩu | Dùng mật khẩu OPDS, không dùng mật khẩu quản lý |
+| vBook hỏi tài khoản hoặc mật khẩu | Để trống cả hai ô; sao chép lại URL `/o/` từ **Kết nối vBook** |
 | Không thấy thông tin vừa sửa | Làm mới hoặc mở lại kho OPDS trong vBook |
 | Không thấy nguồn OPDS vừa thêm | Kiểm tra nguồn đang bật, rồi làm mới catalog trong vBook |
 | Không thêm được nguồn OPDS | URL phải dùng HTTPS công khai và trả về OPDS XML/JSON hợp lệ; kiểm tra lại tài khoản nguồn |
 | Link nguồn ngừng hoạt động | Nguồn bên ngoài có thể đổi URL/credential hoặc tạm ngừng; xóa rồi thêm lại nếu thông tin đã đổi |
-| Quên mật khẩu OPDS | Mở **Kết nối vBook** và tạo lại mật khẩu OPDS |
+| vBook không mở được link OPDS | Sao chép lại URL `/o/` từ **Kết nối vBook**; để trống Tên và Mật khẩu |
 | Quét bị dừng | Chờ khoảng một phút rồi bấm **Tiếp tục / thử lại** |
 | Ảnh bìa không hiện | Dùng URL `https://`; máy chủ ảnh có thể chặn truy cập ngoài |
 | Không tìm thấy toàn bộ sách | Chạy **Kiểm tra toàn thư viện**; tìm kiếm web chỉ áp dụng trên dữ liệu đã tải |
@@ -239,7 +232,7 @@ pnpm run deploy
 
 Khi **nâng cấp một thư viện đã triển khai**, giữ nguyên `wrangler.production.toml`, D1 và các secret hiện có; không tạo database hoặc tài khoản thư viện mới. Ghi lại bookmark Time Travel của D1 bằng `pnpm exec wrangler d1 time-travel info DB --config wrangler.production.toml`, rồi áp dụng các migration mới (hiện đến `0007_opds_title_prefixes.sql`) bằng lệnh `d1 migrations apply` ở trên **trước** khi deploy Worker mới. Cloudflare D1 có [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) và Wrangler ghi backup khi áp dụng migration. Sau deploy, mở trang quản lý, thử nhập hơn 10 feed giả lập hoặc nguồn của bạn, kiểm tra một nguồn lỗi và nút xóa, rồi mở **Kệ tổng hợp** trong vBook để kiểm tra phân trang và tải sách. Các URL OPDS cá nhân chỉ nhập vào giao diện quản lý, không đưa vào mã nguồn hoặc ảnh hướng dẫn.
 
-Sau deploy, dùng một thư mục Drive thử để kiểm tra tạo thư viện, quét thư mục con, sửa metadata, Basic Auth OPDS, phân trang, bìa và tải sách trên vBook thật. Theo dõi lỗi 401/429/5xx và mức sử dụng D1/Drive trên Cloudflare; không ghi credential hoặc URL Drive vào log.
+Sau deploy, dùng một thư mục Drive thử để kiểm tra tạo thư viện, quét thư mục con, sửa metadata, OPDS công khai, phân trang, bìa và tải sách trên vBook thật. Theo dõi lỗi 401/429/5xx và mức sử dụng D1/Drive trên Cloudflare; không ghi credential hoặc URL Drive vào log.
 
 ## Tương thích bản cũ
 

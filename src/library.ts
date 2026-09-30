@@ -498,8 +498,14 @@ async function requireOpds(c: C, next: () => Promise<void>, field: 'id' | 'short
   c.set('library', lib); await next();
 }
 api.use('/library/:id/*', (c, next) => requireOpds(c, next, 'id', c.req.param('id')));
-api.use('/o/:shortId', (c, next) => requireOpds(c, next, 'short_id', c.req.param('shortId')));
-api.use('/o/:shortId/*', (c, next) => requireOpds(c, next, 'short_id', c.req.param('shortId')));
+async function publicOpds(c: C, next: () => Promise<void>) {
+  const lib = await c.env.DB.prepare('SELECT * FROM libraries WHERE short_id = ?').bind(c.req.param('shortId')).first<Library>();
+  if (!lib) return fail(404, 'Không tìm thấy thư viện OPDS.');
+  c.set('library', lib);
+  await next();
+}
+api.use('/o/:shortId', publicOpds);
+api.use('/o/:shortId/*', publicOpds);
 
 async function serveOpds(c: C, feedPath: string, downloadPath: string) {
   const lib = c.get('library'), url = new URL(c.req.url), q = (c.req.query('q') || '').trim();
