@@ -9,6 +9,7 @@ import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, p
 import { managedFeed, XML_TYPE } from './library-feed';
 import { fetchOpds, isGoogleDriveResource, OpdsSourceConfig, OpdsSourceRow, rewriteOpdsBody, safeOpdsUrl, sourceConfig, sourceToken, validateOpds } from './opds-source';
 import { scanOpdsSource, ScannedOpdsItem } from './opds-scan';
+import { stripOpdsTitlePrefixes } from './opds-title';
 
 export interface LibraryEnv { DB: D1Database; MASK_SECRET: string; GOOGLE_API_KEY: string }
 interface Session { library_id: string; csrf: string; expires_at: number }
@@ -27,6 +28,9 @@ async function privateDriveCovers<T extends {coverUrl:string}>(secret: string, o
   return Promise.all(items.map(async item => isDriveCover(item.coverUrl)
     ? {...item, coverUrl: `${origin}/assets/drive-cover?ref=${encodeURIComponent(await protectData(secret, 'drive-cover', {url:item.coverUrl}))}`} as T
     : item));
+}
+function presentOpdsTitles<T extends {name:string;title:string;opdsTitle:string;isFolder:boolean}>(items: T[], enabled: boolean): T[] {
+  return enabled ? items.map(item => item.isFolder ? item : {...item, title: stripOpdsTitlePrefixes(item.name), opdsTitle: stripOpdsTitlePrefixes(item.name)}) : items;
 }
 
 api.get('/assets/drive-cover', async c => {
@@ -130,7 +134,7 @@ async function session(c: C): Promise<Session> {
   if (!['GET', 'HEAD'].includes(c.req.method) && !equal(c.req.header('X-CSRF-Token') || '', row.csrf)) fail(403, 'Phiên thao tác không hợp lệ. Hãy tải lại trang.');
   return row;
 }
-function publicLibrary(l: Library) { return { id: l.id, shortId: l.short_id, name: l.name, username: l.username, hasDrive: Boolean(l.root_token), createdAt: l.created_at }; }
+function publicLibrary(l: Library) { return { id: l.id, shortId: l.short_id, name: l.name, username: l.username, hasDrive: Boolean(l.root_token), stripOpdsPrefixes: Boolean(l.strip_opds_prefixes), createdAt: l.created_at }; }
 function credentials(c: C, library: Pick<Library, 'id' | 'short_id'>, password: string) {
   const path = library.short_id ? `/o/${library.short_id}` : `/library/${library.id}/opds`;
   return { url: `${new URL(c.req.url).origin}${path}`, username: 'reader', password };
@@ -202,7 +206,7 @@ api.post('/api/libraries', async c => {
   await c.env.DB.batch(statements);
   const csrf = await startSession(c, id, 0);
   const library = { id, short_id: shortId };
-  return c.json({ library: { id, shortId, name, username, hasDrive: Boolean(folder) }, csrf, recoveryCode: recovery, opds: credentials(c, library, opds) }, 201);
+  return c.json({ library: { id, shortId, name, username, hasDrive: Boolean(folder), stripOpdsPrefixes: false }, csrf, recoveryCode: recovery, opds: credentials(c, library, opds) }, 201);
 });
 api.post('/api/session', async c => {
   await rateLimit(c, 'login');
@@ -247,6 +251,12 @@ api.use('/api/libraries/:id/*', async (c, next) => {
   if (s.library_id !== c.req.param('id')) return c.json({ error: 'Không có quyền truy cập thư viện này.' }, 403);
   c.set('session', s); c.set('library', await getLibrary(c.env.DB, s.library_id));
   await next();
+});
+api.patch('/api/libraries/:id/settings', async c => {
+  const body = await jsonBody(c), lib = c.get('library');
+  if (typeof body.stripOpdsPrefixes !== 'boolean') fail(400, 'Tùy chọn tên sách OPDS không hợp lệ.');
+  await c.env.DB.prepare('UPDATE libraries SET strip_opds_prefixes = ? WHERE id = ?').bind(body.stripOpdsPrefixes ? 1 : 0, lib.id).run();
+  return c.json({ stripOpdsPrefixes: body.stripOpdsPrefixes });
 });
 api.post('/api/libraries/:id/password', async c => {
   await rateLimit(c, 'change-password');
@@ -323,7 +333,7 @@ api.post('/api/libraries/:id/scan', async c => {
       const data = await scanOpdsSource(c.env.MASK_SECRET, c.get('library').id, row!, targetToken);
       const excluded = (await c.env.DB.prepare('SELECT book_key FROM opds_exclusions WHERE library_id = ? AND source_id = ?').bind(c.get('library').id, sourceId).all<{book_key:string}>()).results;
       const hidden = new Set(excluded.map(item => item.book_key));
-      return c.json({ ...data, items: data.items.filter(item => item.isFolder || !hidden.has(item.key)) });
+      return c.json({ ...data, items: presentOpdsTitles(data.items.filter(item => item.isFolder || !hidden.has(item.key)), Boolean(c.get('library').strip_opds_prefixes)) });
     }
     catch (error) {
       if (error instanceof HTTPException) throw error;
@@ -553,7 +563,7 @@ async function serveAggregate(c: C) {
     next = `${start}?cursor=${id}`;
   }
   const json = (c.req.header('Accept') || '').includes('application/opds+json');
-  return c.body(managedFeed({libraryId:lib.id,title:'Kệ tổng hợp'+(failed.length?' · '+failed.length+' nguồn lỗi':''),description:failed.length?'Không đọc được: '+failed.map(item=>item.name).join(', ')+'. Mở lại kệ để thử lại hoặc tắt nguồn lỗi.':undefined,feedUrl:start,downloadUrl:start,self,start,next,folderKey:'all',items:await privateDriveCovers(c.env.MASK_SECRET, url.origin, books),externalDownloads:downloads,
+  return c.body(managedFeed({libraryId:lib.id,title:'Kệ tổng hợp'+(failed.length?' · '+failed.length+' nguồn lỗi':''),description:failed.length?'Không đọc được: '+failed.map(item=>item.name).join(', ')+'. Mở lại kệ để thử lại hoặc tắt nguồn lỗi.':undefined,feedUrl:start,downloadUrl:start,self,start,next,folderKey:'all',items:await privateDriveCovers(c.env.MASK_SECRET, url.origin, presentOpdsTitles(books, Boolean(lib.strip_opds_prefixes))),externalDownloads:downloads,
     sources: !books.length && next ? [{id:'continue',title:'Tiếp tục tìm sách',href:next}] : []}, json), 200,
     {'Content-Type':`${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`,Vary:'Accept, Authorization'});
 }
@@ -601,7 +611,7 @@ api.get('/o/:shortId/s/:sourceShortId', async c => {
     if (upstream.ok) {
       try {
         const exclusions = (await c.env.DB.prepare('SELECT book_key FROM opds_exclusions WHERE library_id = ? AND source_id = ?').bind(lib.id, row.id).all<{book_key:string}>()).results;
-        rewritten = await rewriteOpdsBody(c.env.MASK_SECRET, lib.short_id, row, new URL(upstream.url || target.href), body, contentType, new Set(exclusions.map(item => item.book_key)));
+        rewritten = await rewriteOpdsBody(c.env.MASK_SECRET, lib.short_id, row, new URL(upstream.url || target.href), body, contentType, new Set(exclusions.map(item => item.book_key)), Boolean(lib.strip_opds_prefixes));
       }
       catch { fail(503, 'Không đọc được dữ liệu từ nguồn OPDS.'); }
     }

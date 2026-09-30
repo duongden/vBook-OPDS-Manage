@@ -44,7 +44,7 @@ export function managedFeed(f: ManagedFeed, json: boolean): string {
     if (i.isFolder) return head + `<link rel="subsection" href="${e(folderUrl(i))}" type="${XML_TYPE}"/></entry>`;
     return head + (i.author ? `<author><name>${e(i.author)}</name></author>` : '') +
       (i.language ? `<dc:language>${e(i.language)}</dc:language>` : '') +
-      `<summary>${e(i.description || i.name)}</summary><content type="text">${e(i.description || i.name)}</content>` +
+      `<summary>${e(i.description || (i.external ? i.title : i.name))}</summary><content type="text">${e(i.description || (i.external ? i.title : i.name))}</content>` +
       `<category term="${e(i.format)}" label="${e(i.format)}"/>` +
       (i.category ? `<category term="${e(i.category)}" label="${e(i.category)}"/>` : '') +
       (i.coverUrl ? `<link rel="http://opds-spec.org/image" href="${e(i.coverUrl)}"/><link rel="http://opds-spec.org/image/thumbnail" href="${e(i.coverUrl)}"/>` : '') +

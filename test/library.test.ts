@@ -10,6 +10,14 @@ import { bookKey, hashPassword, checkPassword, seal } from '../src/library-secur
 import { libraryClient } from '../src/library-client';
 import { libraryCss, libraryHtml } from '../src/library-ui';
 import { inferBookLanguage } from '../src/book-language';
+import { stripOpdsTitlePrefixes } from '../src/opds-title';
+
+test('removes only leading bracketed source labels', () => {
+  assert.equal(stripOpdsTitlePrefixes('[downloadsach.com] Tam vai do - H.epub'), 'Tam vai do - H.epub');
+  assert.equal(stripOpdsTitlePrefixes(' [site] [Mirror] Truyện [Tập 1].epub'), 'Truyện [Tập 1].epub');
+  assert.equal(stripOpdsTitlePrefixes('[Tên sách]'), '[Tên sách]');
+  assert.equal(stripOpdsTitlePrefixes('Truyện [Tập 1].epub'), 'Truyện [Tập 1].epub');
+});
 
 test('classifies only sufficiently clear book text', () => {
   assert.equal(inferBookLanguage('Sách tiếng Việt'), 'vi');
@@ -66,6 +74,7 @@ globalThis.fetch = (async (input: any, init?: any) => {
     const headers = new Headers(init?.headers);
     if (headers.has('authorization')) assert.equal(headers.get('authorization'), 'Basic '+btoa('shared:source-secret'), 'Upstream credential is only sent by the proxy');
     if (url.pathname === '/google-link') return new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:fake:google</id><title>Drive links</title><entry><id>urn:fake:drive-book</id><title>Drive book</title><link rel="http://opds-spec.org/acquisition" href="https://drive.google.com/uc?export=download&amp;id=BOOK_FILE_1234567" type="application/epub+zip"/><link rel="http://opds-spec.org/image" href="https://lh3.googleusercontent.com/private-drive-thumbnail" type="image/jpeg"/></entry></feed>',{headers:{'Content-Type':'application/atom+xml'}});
+    if (url.pathname === '/prefixed') return new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:fake:prefixed</id><title>Kho mẫu</title><entry><id>urn:fake:prefixed-book</id><title>[downloadsach.com] [Nguồn khác] Truyện [Tập 1].epub</title><link rel="http://opds-spec.org/acquisition" href="/book.epub" type="application/epub+zip"/></entry></feed>',{headers:{'Content-Type':'application/atom+xml'}});
     if (url.pathname === '/book.epub') return new Response('fake-epub', {headers:{'Content-Type':'application/epub+zip','Content-Disposition':'attachment; filename="sample.epub"'}});
     if (url.pathname === '/redirect.epub') return new Response(null,{status:302,headers:{Location:'https://downloads.example/book.epub'}});
     const title = url.pathname === '/sub' ? 'Kệ con' : url.pathname === '/second' ? 'Kho thứ hai' : 'Kho sách được chia sẻ';
@@ -301,6 +310,24 @@ test('multiple pasted OPDS URLs create one aggregate catalog without Drive',asyn
   const removedDrive=await h.req(base(a)+'/drive','DELETE',{});assert.equal(removedDrive.status,200);assert.equal((await removedDrive.json() as any).hasDrive,false);
   assert.deepEqual((await (await h.req(base(a)+'/items')).json() as any).items,[]);
 });
+test('OPDS title cleanup persists across scan, aggregate feed and source feed',async()=>{
+  const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kho OPDS',drive:'https://catalog.example/prefixed',username:'owner',password:'long-password-123'}));
+  const source=(await(await h.req(base(a)+'/sources')).json() as any).sources[0];
+  const original=(await(await h.req(base(a)+'/scan','POST',{sourceId:source.id})).json() as any).items.find((item:any)=>!item.isFolder);
+  assert.match(original.title,/^\[downloadsach\.com\]/);
+  assert.equal((await h.req(base(a)+'/settings','PATCH',{stripOpdsPrefixes:'yes'})).status,400);
+  assert.equal((await h.req(base(a)+'/settings','PATCH',{stripOpdsPrefixes:true})).status,200);
+  const cleaned=(await(await h.req(base(a)+'/scan','POST',{sourceId:source.id})).json() as any).items.find((item:any)=>!item.isFolder);
+  assert.equal(cleaned.title,'Truyện [Tập 1].epub');assert.equal(cleaned.name,original.name);assert.equal(cleaned.key,original.key);
+  const aggregate=await(await h.req('/o/'+a.library.shortId+'/all','GET',undefined,auth(a))).text();
+  assert.match(aggregate,/<title>Truyện \[Tập 1\]\.epub<\/title>/);assert.doesNotMatch(aggregate,/\[downloadsach\.com\]/);
+  const sourceFeed=await(await h.req('/o/'+a.library.shortId+'/s/'+source.shortId,'GET',undefined,auth(a))).text();
+  assert.match(sourceFeed,/<title>Truyện \[Tập 1\]\.epub<\/title>/);assert.doesNotMatch(sourceFeed,/\[downloadsach\.com\]/);
+  const signedIn=await(await h.req('/api/session')).json() as any;assert.equal(signedIn.library.stripOpdsPrefixes,true);
+  await h.req(base(a)+'/settings','PATCH',{stripOpdsPrefixes:false});
+  const restored=(await(await h.req(base(a)+'/scan','POST',{sourceId:source.id})).json() as any).items.find((item:any)=>!item.isFolder);
+  assert.equal(restored.title,original.title);
+});
 test('aggregate shelf traverses source pages and nested feeds without repeating books',async()=>{
   const h=harness(),links=Array.from({length:13},(_,i)=>`https://catalog.example/opds?source=${i}`);
   const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chung',drive:links.slice(0,10).join('\n'),username:'owner',password:'long-password-123'}));
@@ -464,6 +491,10 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     field('#drive-form','drive','https://drive.google.com/drive/folders/'+ROOT);submit('#drive-form');await wait(()=>d.querySelector('#notice')!.textContent==='Đã cập nhật nguồn Google Drive.');assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');assert.equal((d.querySelector('#drive-remove') as HTMLButtonElement).hidden,false);
     field('#source-form','urls','https://catalog.example/opds');field('#source-form','username','shared');field('#source-form','password','source-secret');submit('#source-form');
     await wait(()=>d.querySelectorAll('.source-row').length===1);assert.equal(d.querySelector('#source-count')!.textContent,'2');assert.ok(d.querySelector('#source-list')!.textContent!.includes('Kho sách được chia sẻ'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('source-secret'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('https://catalog.example/opds'));
+    assert.equal((d.querySelector('#opds-title-option') as HTMLElement).hidden,false);
+    click('#strip-opds-prefixes');await wait(()=>d.querySelector('#notice')!.textContent!.includes('Đã bỏ tiền tố'));
+    assert.equal((d.querySelector('#strip-opds-prefixes') as HTMLInputElement).checked,true);
+    click('#strip-opds-prefixes');await wait(()=>d.querySelector('#notice')!.textContent!.includes('Đã hiện lại tên gốc'));
     field('#source-form','urls','http://invalid.example/opds');submit('#source-form');
     await wait(()=>Boolean(d.querySelector('#source-form .form-error')));
     assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');

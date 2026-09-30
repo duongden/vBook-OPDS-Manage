@@ -8,6 +8,8 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const langName = value => ({vi:'Tiếng Việt',en:'English',fr:'Français',zh:'中文','zh-Hans':'中文',ja:'日本語',ko:'한국어'}[value] || value || 'Chưa rõ');
 const bookLangName = book => langName(book.language)+(book.languageInferred?' (ước đoán)':'');
 const sizeName = value => {if(value === undefined || value === '')return '—';let n=Number(value),u=0;const units=['B','KB','MB','GB'];while(n>=1024&&u<3){n/=1024;u++;}return n.toLocaleString('vi',{maximumFractionDigits:1})+' '+units[u];};
+const opdsTitle = title => {const cleaned=title.replace(/^(?:\s*\[[^\]\r\n]{1,100}\]\s*)+/u,'').trim();return cleaned||title;};
+function setOpdsTitles(book){if(book.external&&!book.isFolder){book.title=library.stripOpdsPrefixes?opdsTitle(book.name):book.name;book.opdsTitle=book.title;}return book;}
 function savedTheme(){try{const value=localStorage.getItem('vbook-theme');if(value==='light'||value==='dark')return value;}catch{}return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
 function applyTheme(theme,persist=false){document.documentElement.dataset.theme=theme;const toggle=$('#theme-toggle'),dark=theme==='dark';toggle.textContent=dark?'☀':'☾';toggle.setAttribute('aria-pressed',String(dark));toggle.setAttribute('aria-label',dark?'Chuyển sang giao diện sáng':'Chuyển sang giao diện tối');toggle.title=dark?'Giao diện sáng':'Giao diện tối';if(persist)try{localStorage.setItem('vbook-theme',theme);}catch{}}
 let theme=savedTheme();applyTheme(theme);
@@ -47,6 +49,7 @@ function renderConnection(){
 }
 function renderSources(){
  $('#source-count').textContent=String(sources.length+(library?.hasDrive?1:0));
+ $('#opds-title-option').hidden=!sources.length;
  const sourceIds=new Set(sources.map(source=>source.id));for(const id of selectedSourceIds)if(!sourceIds.has(id))selectedSourceIds.delete(id);
  const all=$('#select-all-sources'),selectedButton=$('#delete-selected-sources');all.checked=Boolean(sources.length)&&selectedSourceIds.size===sources.length;all.indeterminate=selectedSourceIds.size>0&&!all.checked;all.disabled=!sources.length||bulkDeletingSelected||bulkDeletingFailed;
  selectedButton.textContent='Xóa hàng loạt ('+selectedSourceIds.size+')';selectedButton.dataset.count=String(selectedSourceIds.size);selectedButton.disabled=!selectedSourceIds.size||bulkDeletingSelected||bulkDeletingFailed;
@@ -67,6 +70,7 @@ async function loadSources(){
 }
 async function enter(data,autoScan=true){
  library=data.library;csrf=data.csrf;sourceChecks.clear();sourceErrors.clear();sourceTransient.clear();revealedSourceIds.clear();sourceCheckComplete=false;selectedSourceIds.clear();pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanResultPage=1;browsePageIndex=0;browsePages=[];scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
+ $('#strip-opds-prefixes').checked=Boolean(library.stripOpdsPrefixes);
  $('#welcome').hidden=true;$('#dashboard').hidden=false;$('#logout').hidden=false;$('#account-button').hidden=false;$('#library-name').textContent=library.name;
  history.replaceState(null,'','/?library='+encodeURIComponent(library.id));
  $('#account-info').textContent='Mã thư viện: '+(library.shortId||library.id)+' · Tên đăng nhập: '+library.username;
@@ -161,7 +165,7 @@ async function scanLoop(){
    scanSeen.add(data.folderKey);scanQueue.shift();scanPages++;
    data.items.forEach(b=>{
     if(b.isFolder){if(!scanSeen.has(b.key)){scanSeen.add(b.key);scanQueue.push({ref:b.ref,...(b.sourceId?{sourceId:b.sourceId}:{})});}}
-    else scanItems.set(b.key,b);
+    else scanItems.set(b.key,setOpdsTitles(b));
    });
    if(data.nextCursor)scanQueue.unshift({...job,cursor:data.nextCursor});
    scanComplete=scanQueue.length===0;
@@ -338,6 +342,16 @@ $('#search').addEventListener('input',()=>{scanResultPage=1;render();});['langua
 $('#page-prev').addEventListener('click',()=>{if(busy)return;if(scanMode)scanResultPage=Math.max(1,scanResultPage-1);else browsePageIndex=Math.max(0,browsePageIndex-1);fillFilters();render();});
 $('#load-more').addEventListener('click',()=>{if(busy)return;if(scanMode){scanResultPage++;render();}else if(browsePageIndex<browsePages.length-1){browsePageIndex++;fillFilters();render();}else if(nextCursor)browse(true);});$('#reload-folder').addEventListener('click',()=>{pauseScan();trail=[];browse(false);});
 $('#scan-start').addEventListener('click',()=>startScan());
+$('#strip-opds-prefixes').addEventListener('change',async event=>{
+ const checkbox=event.target,previous=Boolean(library.stripOpdsPrefixes);checkbox.disabled=true;
+ try{
+  const data=await api(endpoint('/settings'),'PATCH',{stripOpdsPrefixes:checkbox.checked});
+  library.stripOpdsPrefixes=data.stripOpdsPrefixes;
+  scanItems.forEach(setOpdsTitles);pageItems.forEach(setOpdsTitles);render();
+  notice(data.stripOpdsPrefixes?'Đã bỏ tiền tố [nguồn] ở đầu tên sách OPDS. Làm mới kệ trong vBook để thấy tên mới.':'Đã hiện lại tên gốc từ nguồn OPDS. Làm mới kệ trong vBook để thấy tên gốc.');
+ }catch(error){checkbox.checked=previous;notice('Không lưu được tùy chọn tên sách. '+error.message,true);}
+ finally{checkbox.disabled=false;}
+});
 $('#scan-pause').addEventListener('click',()=>{pauseScan();$('#scan-status').textContent='Đã tạm dừng. Kết quả chưa đầy đủ; có thể tiếp tục trong phiên trang này.';});$('#scan-resume').addEventListener('click',scanLoop);
 $('#scan-results').addEventListener('click',()=>{requestEpoch++;busy=false;scanMode=true;scanResultPage=1;selected.clear();fillFilters();render();});
 $('#select-all').addEventListener('change',event=>{const list=filtered(),visible=scanMode?list.slice((scanResultPage-1)*RESULT_PAGE_SIZE,scanResultPage*RESULT_PAGE_SIZE):list;visible.filter(b=>!b.isFolder).forEach(b=>event.target.checked?selected.add(b.key):selected.delete(b.key));render();});

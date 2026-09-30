@@ -1,4 +1,5 @@
 import { bookKey, fail, protectData, revealData } from './library-security';
+import { stripOpdsTitlePrefixes } from './opds-title';
 
 export interface OpdsSourceConfig extends Record<string, unknown> {
   url: string;
@@ -131,16 +132,19 @@ const jsonBookIdentity = (publication: Record<string, any>): string => {
   return String(publication.metadata?.identifier || acquisition?.href || publication.metadata?.title || '');
 };
 
-export async function rewriteOpdsBody(secret: string, libraryShortId: string, row: OpdsSourceRow, base: URL, body: string, contentType: string, excluded = new Set<string>()): Promise<string> {
+export async function rewriteOpdsBody(secret: string, libraryShortId: string, row: OpdsSourceRow, base: URL, body: string, contentType: string, excluded = new Set<string>(), stripTitlePrefixes = false): Promise<string> {
   const root = safeOpdsUrl((await sourceConfig(secret, row)).url);
   if (contentType.includes('json') || body.trimStart().startsWith('{')) {
     const data = JSON.parse(body);
     const filterPublications = async (holder: Record<string, any>) => {
-      if (!Array.isArray(holder.publications) || !excluded.size) return;
+      if (!Array.isArray(holder.publications)) return;
       const kept = [];
       for (const publication of holder.publications) {
         const key = await bookKey(secret, row.library_id, `opds-book:${row.id}:${jsonBookIdentity(publication)}`);
-        if (!excluded.has(key)) kept.push(publication);
+        if (!excluded.has(key)) {
+          if (stripTitlePrefixes && typeof publication.metadata?.title === 'string') publication.metadata.title = stripOpdsTitlePrefixes(publication.metadata.title);
+          kept.push(publication);
+        }
       }
       holder.publications = kept;
     };
@@ -155,14 +159,21 @@ export async function rewriteOpdsBody(secret: string, libraryShortId: string, ro
     };
     await visit(data); return JSON.stringify(data);
   }
-  if (excluded.size) {
+  if (excluded.size || stripTitlePrefixes) {
     const entries = [...body.matchAll(/<(?:[\w-]+:)?entry\b[^>]*>[\s\S]*?<\/(?:[\w-]+:)?entry>/gi)];
     let filtered = '', entryOffset = 0;
     for (const match of entries) {
       filtered += body.slice(entryOffset, match.index);
       const identity = xmlBookIdentity(match[0]);
       const key = identity ? await bookKey(secret, row.library_id, `opds-book:${row.id}:${identity}`) : '';
-      if (!key || !excluded.has(key)) filtered += match[0];
+      if (!key || !excluded.has(key)) {
+        let entry = match[0];
+        if (stripTitlePrefixes && /<(?:(?:[\w-]+):)?link\b[^>]*\brel\s*=\s*(['"])[^'"]*acquisition[^'"]*\1/i.test(entry)) {
+          entry = entry.replace(/(<(?:[\w-]+:)?title(?:\s[^>]*)?>)([\s\S]*?)(<\/(?:[\w-]+:)?title>)/i,
+            (_, open: string, title: string, close: string) => open + xmlEscape(stripOpdsTitlePrefixes(xmlUnescape(title))) + close);
+        }
+        filtered += entry;
+      }
       entryOffset = match.index! + match[0].length;
     }
     body = filtered + body.slice(entryOffset);

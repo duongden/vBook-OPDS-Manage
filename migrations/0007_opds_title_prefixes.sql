@@ -1,0 +1,1 @@
+ALTER TABLE libraries ADD COLUMN strip_opds_prefixes INTEGER NOT NULL DEFAULT 0;
