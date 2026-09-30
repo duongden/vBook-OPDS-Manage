@@ -80,6 +80,7 @@ async function loadSources(){
  if(!library)return;sources=(await api(endpoint('/sources'))).sources;renderSources();render();
 }
 async function enter(data,autoScan=true){
+ publicEpoch++;$('#public-library').hidden=true;
  library=data.library;csrf=data.csrf;sourceChecks.clear();sourceErrors.clear();sourceTransient.clear();sourceCheckComplete=false;selectedSourceIds.clear();pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanResultPage=1;browsePageIndex=0;browsePages=[];scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
  $('#strip-opds-prefixes').checked=Boolean(library.stripOpdsPrefixes);
  $('#welcome').hidden=true;$('#dashboard').hidden=false;$('#logout').hidden=false;$('#account-button').hidden=false;$('#library-name').textContent=library.name;
@@ -385,5 +386,71 @@ $('#bulk-delete-opds').addEventListener('click',async()=>{const books=[...select
 $('#edit-form').elements.coverUrl.addEventListener('input',previewCover);
 $('#edit-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{const data=await api(endpoint('/books/'+editing.key),'PUT',{...Object.fromEntries(new FormData(f)),ref:editing.ref});applyOverrides(editing.key,data.overrides);$('#editor').close();notice('Đã lưu. Làm mới thư viện trong vBook để nhận thông tin mới.');});});
 $('#reset-book').addEventListener('click',()=>{if(!editing||!confirm('Xóa các chỉnh sửa và dùng lại thông tin nguồn Drive?'))return;submitForm($('#edit-form'),async()=>{await api(endpoint('/books/'+editing.key),'DELETE',{ref:editing.ref});applyOverrides(editing.key,{});$('#editor').close();notice('Đã khôi phục dữ liệu nguồn.');});});
-(async()=>{const id=new URL(location.href).searchParams.get('library');if(id){$('#login').elements.libraryId.value=id;$('#recovery').elements.libraryId.value=id;tab('login');}try{const data=await api('/api/session');await enter(data);}catch(e){if(e.status!==401)notice(e.message,true);}})();
+let publicLibrary=null,publicTrail=[],publicPages=[],publicPageIndex=0,publicQuery='',publicBusy=false,publicWarning='',publicEpoch=0;
+function publicPath(href){
+ if(!publicLibrary)return '';
+ try{const url=new URL(href,location.origin),base='/o/'+publicLibrary.shortId;if(url.origin!==location.origin||!(url.pathname===base||url.pathname.startsWith(base+'/')))return '';return url.pathname+url.search;}
+ catch{return '';}
+}
+function publicSearchPaths(){
+ const base='/o/'+publicLibrary.shortId,term='?q='+encodeURIComponent(publicQuery);
+ return publicLibrary.hasDrive?[base+term,base+'/all'+term]:[base+'/all'+term];
+}
+function renderPublic(){
+ if(!publicLibrary)return;
+ const page=publicPages[publicPageIndex]||{navigation:[],publications:[],next:[]},hasNext=page.next.length>0;
+ $('#public-breadcrumbs').innerHTML='<button type="button" data-public-crumb="-1">Thư viện</button>'+publicTrail.map((entry,index)=>'<span>/</span><button type="button" data-public-crumb="'+index+'">'+escapeHtml(entry.title)+'</button>').join('');
+ const navigation=publicQuery?[]:page.navigation.filter(entry=>publicPath(entry.href));
+ const navCards=navigation.map((entry,index)=>'<article class="public-card"><div class="cover"><div class="fallback"><strong>Danh mục</strong></div></div><h3>'+escapeHtml(entry.title)+'</h3><button type="button" data-public-open="'+index+'">Mở danh mục</button></article>');
+ const bookCards=page.publications.map(book=>{
+  const title=book.metadata?.title||'Sách chưa có tên',author=book.metadata?.author?.[0]?.name||'',link=(book.links||[]).find(item=>(item.rel||[]).some(rel=>String(rel).includes('acquisition'))),download=link&&publicPath(link.href),cover=book.images?.[0]?.href||'';
+  let image='';try{const url=new URL(cover);if(url.protocol==='https:')image='<img src="'+escapeHtml(url.href)+'" alt="Bìa '+escapeHtml(title)+'" loading="lazy" referrerpolicy="no-referrer">';}catch{}
+  return '<article class="public-card"><div class="cover"><div class="fallback"><strong>SÁCH</strong></div>'+image+'</div><h3>'+escapeHtml(title)+'</h3><p>'+escapeHtml(author||'Chưa có tác giả')+'</p>'+(download?'<a class="primary action-button" href="'+escapeHtml(download)+'" download>Tải sách</a>':'')+'</article>';
+ });
+ $('#public-items').innerHTML=navCards.length||bookCards.length?'<div class="books">'+[...navCards,...bookCards].join('')+'</div>':'<div class="empty">'+(publicBusy?'Đang tải sách…':hasNext?'Chưa có sách trong phần đã quét. Bấm Trang sau để tiếp tục.':'Không tìm thấy sách phù hợp.')+'</div>';
+ $('#public-status').textContent=publicBusy?'Đang tìm và tải trang sách…':page.publications.length+' sách · '+navigation.length+' danh mục trên trang'+(hasNext?' · còn trang sau':'')+(publicWarning?' · '+publicWarning:'');
+ $('#public-page-label').textContent='Trang '+(publicPageIndex+1)+(hasNext?' · còn tiếp':'');
+ $('#public-prev').hidden=publicPageIndex===0;$('#public-next').hidden=!hasNext&&publicPageIndex>=publicPages.length-1;
+ $('#public-prev').disabled=publicBusy;$('#public-next').disabled=publicBusy;
+ $('#public-search-clear').hidden=!publicQuery;
+ $('#public-items').querySelectorAll('img').forEach(img=>img.addEventListener('error',()=>img.remove()));
+}
+async function loadPublic(paths,reset=false){
+ if(!publicLibrary)return;
+ const epoch=++publicEpoch;publicBusy=true;publicWarning='';if(reset){publicPages=[];publicPageIndex=0;}renderPublic();
+ try{
+  let page;
+  for(let scanned=0;scanned<4;scanned++){
+   const results=await Promise.allSettled(paths.map(async path=>{
+    const safe=publicPath(path);if(!safe)throw new Error('Link danh mục không hợp lệ.');
+    const response=await fetch(safe,{headers:{Accept:'application/opds+json'}}),data=await response.json();
+    if(!response.ok)throw new Error(data.error||'Không đọc được danh mục.');return data;
+   }));
+   if(epoch!==publicEpoch)return;
+   const feeds=results.filter(result=>result.status==='fulfilled').map(result=>result.value);
+   if(!feeds.length)throw results[0].reason;
+   if(feeds.length<results.length)publicWarning='Một phần thư viện chưa tải được. Hãy thử lại sau.';
+   page={navigation:feeds.flatMap(feed=>feed.navigation||[]),publications:feeds.flatMap(feed=>feed.publications||[]),next:feeds.map(feed=>(feed.links||[]).find(link=>(link.rel||[]).includes('next'))?.href).filter(Boolean)};
+   if(!publicQuery||page.publications.length||!page.next.length)break;
+   paths=page.next;$('#public-status').textContent='Đang tìm tiếp trong các trang nguồn…';
+  }
+  publicPages.push(page);publicPageIndex=publicPages.length-1;notice('');
+ }catch(error){if(epoch===publicEpoch)notice('Không tải được thư viện được chia sẻ. '+error.message,true);}
+ finally{if(epoch===publicEpoch){publicBusy=false;renderPublic();}}
+}
+async function openPublicLibrary(id){
+ try{
+  const data=await api('/api/public/libraries/'+encodeURIComponent(id));publicLibrary=data.library;publicTrail=[];publicQuery='';
+  $('#public-library-name').textContent=publicLibrary.name;$('#public-search-input').value='';$('#welcome').hidden=true;$('#dashboard').hidden=true;$('#public-library').hidden=false;
+  await loadPublic(['/o/'+publicLibrary.shortId],true);
+ }catch(error){notice('Không mở được link thư viện. '+error.message,true);}
+}
+$('#public-login').addEventListener('click',()=>{$('#public-library').hidden=true;$('#welcome').hidden=false;tab('login');});
+$('#public-search-form').addEventListener('submit',event=>{event.preventDefault();if(!publicLibrary)return;publicQuery=$('#public-search-input').value.trim();publicTrail=[];loadPublic(publicQuery?publicSearchPaths():['/o/'+publicLibrary.shortId],true);});
+$('#public-search-clear').addEventListener('click',()=>{publicQuery='';$('#public-search-input').value='';publicTrail=[];loadPublic(['/o/'+publicLibrary.shortId],true);});
+$('#public-next').addEventListener('click',()=>{if(publicPageIndex<publicPages.length-1){publicPageIndex++;renderPublic();return;}const next=publicPages[publicPageIndex]?.next||[];if(next.length)loadPublic(next);});
+$('#public-prev').addEventListener('click',()=>{if(publicPageIndex>0){publicPageIndex--;renderPublic();}});
+$('#public-items').addEventListener('click',event=>{const button=event.target.closest('[data-public-open]');if(!button)return;const entry=publicPages[publicPageIndex]?.navigation.filter(item=>publicPath(item.href))[Number(button.dataset.publicOpen)];if(!entry)return;const path=publicPath(entry.href);if(!path)return;publicTrail.push({title:entry.title,href:path});publicQuery='';$('#public-search-input').value='';loadPublic([path],true);});
+$('#public-breadcrumbs').addEventListener('click',event=>{const button=event.target.closest('[data-public-crumb]');if(!button)return;const index=Number(button.dataset.publicCrumb),path=index<0?'/o/'+publicLibrary.shortId:publicTrail[index]?.href;if(!path)return;publicTrail=publicTrail.slice(0,index+1);publicQuery='';$('#public-search-input').value='';loadPublic([path],true);});
+(async()=>{const id=new URL(location.href).searchParams.get('library');if(id){$('#login').elements.libraryId.value=id;$('#recovery').elements.libraryId.value=id;tab('login');}try{const data=await api('/api/session');if(id&&id!==data.library.id&&id!==data.library.shortId)await openPublicLibrary(id);else await enter(data);}catch(e){if(id)await openPublicLibrary(id);else if(e.status!==401)notice(e.message,true);}})();
 `;

@@ -16,7 +16,7 @@ interface Session { library_id: string; csrf: string; expires_at: number }
 type Bindings = { Bindings: LibraryEnv; Variables: { session: Session; library: Library } };
 type C = Context<Bindings>;
 interface AggregateTask { sourceId: string; target: string; key?: string }
-interface AggregateState { pending: AggregateTask[]; seen: string[]; seenBooks: string[]; failed: {id:string;name:string}[] }
+interface AggregateState { pending: AggregateTask[]; seen: string[]; seenBooks: string[]; failed: {id:string;name:string}[]; query: string }
 export const libraryApp = new Hono<Bindings>();
 const COOKIE = '__Host-vbook_session';
 const api = libraryApp;
@@ -60,7 +60,7 @@ api.get('/assets/drive-resource', async c => {
 });
 
 api.use('*', async (c, next) => {
-  if (!/^\/(?:api\/(?:libraries|session|recovery)(?:\/|$)|library\/|o\/)/.test(c.req.path)) { await next(); return; }
+  if (!/^\/(?:api\/(?:libraries|public|session|recovery)(?:\/|$)|library\/|o\/)/.test(c.req.path)) { await next(); return; }
   c.header('Cache-Control', 'private, no-store');
   c.header('X-Content-Type-Options', 'nosniff');
   c.header('Referrer-Policy', 'no-referrer');
@@ -144,6 +144,12 @@ function opdsPassword(value: unknown): string {
   return value as string;
 }
 const newShortId = () => base64url(crypto.getRandomValues(new Uint8Array(9)));
+api.get('/api/public/libraries/:code', async c => {
+  const code = stringInput(c.req.param('code'), 80, 'Mã thư viện', true);
+  const lib = await c.env.DB.prepare('SELECT id, short_id, name, root_token FROM libraries WHERE id = ? OR short_id = ?').bind(code, code).first<Pick<Library, 'id' | 'short_id' | 'name' | 'root_token'>>();
+  if (!lib) return fail(404, 'Không tìm thấy thư viện.');
+  return c.json({ library: { id: lib.id, shortId: lib.short_id, name: lib.name, hasDrive: Boolean(lib.root_token) } });
+});
 type PreparedSource = { id: string; shortId: string; name: string; token: string };
 async function prepareSource(secret: string, libraryId: string, raw: Record<string, unknown>): Promise<PreparedSource> {
   const enteredUrl = stringInput(raw.url, 2048, 'URL OPDS', true);
@@ -529,17 +535,19 @@ async function serveOpds(c: C, feedPath: string, downloadPath: string) {
     { 'Content-Type': `${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`, Vary: 'Accept, Authorization' });
 }
 async function serveAggregate(c: C) {
-  const lib = c.get('library'), url = new URL(c.req.url), now = Date.now(), cursor = c.req.query('cursor') || '';
+  const lib = c.get('library'), url = new URL(c.req.url), now = Date.now(), cursor = c.req.query('cursor') || '', query = (c.req.query('q') || '').trim();
+  if (query.length > 200) fail(400, 'Từ khóa tối đa 200 ký tự.');
   let state: AggregateState;
   if (cursor) {
     if (!/^[\w-]{43}$/.test(cursor)) fail(400, 'Con trỏ kệ tổng hợp không hợp lệ.');
     const row = await c.env.DB.prepare('SELECT state FROM opds_aggregate_states WHERE id = ? AND library_id = ? AND expires_at > ?').bind(cursor, lib.id, now).first<{state:string}>();
     if (!row) fail(400, 'Trang kệ tổng hợp đã hết hạn. Hãy mở lại kệ.');
     state = JSON.parse(row!.state) as AggregateState;
+    if ((state.query || '') !== query) fail(400, 'Con trỏ không thuộc truy vấn này.');
   } else {
     await c.env.DB.prepare('DELETE FROM opds_aggregate_states WHERE expires_at < ?').bind(now).run();
     const rows = (await c.env.DB.prepare('SELECT id FROM opds_sources WHERE library_id = ? AND enabled = 1 ORDER BY created_at, name').bind(lib.id).all<{id:string}>()).results;
-    state = { pending: rows.map(row => ({sourceId:row.id,target:''})), seen:[], seenBooks:[], failed:[] };
+    state = { pending: rows.map(row => ({sourceId:row.id,target:''})), seen:[], seenBooks:[], failed:[], query };
   }
   const pending = [...state.pending], seen = new Set(state.seen), seenBooks = new Set(state.seenBooks), failed = [...state.failed], books: ScannedOpdsItem[] = [], downloads: Record<string,string> = {};
   let pages = 0;
@@ -561,21 +569,24 @@ async function serveAggregate(c: C) {
       if (item.isFolder) {
         if (!seen.has(item.key) && !pending.some(job => job.key === item.key)) pending.push({sourceId:row.id,target:item.ref,key:item.key});
       } else if (!hidden.has(item.key) && !seenBooks.has(item.key)) {
-        seenBooks.add(item.key);books.push(item);
+        seenBooks.add(item.key);
         if (seenBooks.size > 5000) seenBooks.delete(seenBooks.values().next().value!);
+        if (!query || [item.title,item.author,item.description,item.category].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))) books.push(item);
       }
     }
     if (page.nextCursor) pending.push({sourceId:row.id,target:page.nextCursor});
   }
-  const start = `${url.origin}/o/${lib.short_id}/all`, self = cursor ? `${start}?cursor=${cursor}` : start;
+  const start = `${url.origin}/o/${lib.short_id}/all`, search = `${start}?q={searchTerms}`;
+  const selfUrl = new URL(start); if (query) selfUrl.searchParams.set('q', query); if (cursor) selfUrl.searchParams.set('cursor', cursor);
+  const self = selfUrl.href;
   let next: string | undefined;
   if (pending.length) {
     const id = randomToken();
     await c.env.DB.prepare('INSERT INTO opds_aggregate_states (id, library_id, state, expires_at) VALUES (?, ?, ?, ?)').bind(id, lib.id, JSON.stringify({pending,seen:[...seen],seenBooks:[...seenBooks],failed}), now + 3600000).run();
-    next = `${start}?cursor=${id}`;
+    const nextUrl = new URL(self); nextUrl.searchParams.set('cursor', id); next = nextUrl.href;
   }
   const json = (c.req.header('Accept') || '').includes('application/opds+json');
-  return c.body(managedFeed({libraryId:lib.id,title:'Kệ tổng hợp'+(failed.length?' · '+failed.length+' nguồn lỗi':''),description:failed.length?'Không đọc được: '+failed.map(item=>item.name).join(', ')+'. Mở lại kệ để thử lại hoặc tắt nguồn lỗi.':undefined,feedUrl:start,downloadUrl:start,self,start,next,folderKey:'all',items:await privateDriveCovers(c.env.MASK_SECRET, url.origin, presentOpdsTitles(books, Boolean(lib.strip_opds_prefixes))),externalDownloads:downloads,
+  return c.body(managedFeed({libraryId:lib.id,title:(query?'Tìm kiếm: '+query:'Kệ tổng hợp')+(failed.length?' · '+failed.length+' nguồn lỗi':''),description:failed.length?'Không đọc được: '+failed.map(item=>item.name).join(', ')+'. Mở lại kệ để thử lại hoặc tắt nguồn lỗi.':undefined,feedUrl:start,downloadUrl:start,self,start,search,next,folderKey:'all',items:await privateDriveCovers(c.env.MASK_SECRET, url.origin, presentOpdsTitles(books, Boolean(lib.strip_opds_prefixes))),externalDownloads:downloads,
     sources: !books.length && next ? [{id:'continue',title:'Tiếp tục tìm sách',href:next}] : []}, json), 200,
     {'Content-Type':`${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`,Vary:'Accept, Authorization'});
 }

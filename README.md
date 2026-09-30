@@ -161,6 +161,12 @@ URL:      https://vbook-opds.example/o/THUVIENMAU12
 
 Đây là catalog tổng hợp: trang đầu chứa các nguồn OPDS đã bật cùng sách/thư mục Drive. Feed Drive tự bổ sung phần mở rộng thật vào tên hiển thị. Sau khi thay đổi nguồn hoặc metadata, hãy làm mới catalog trong vBook vì ứng dụng có thể giữ cache riêng.
 
+### Chia sẻ thư viện để xem trên web
+
+Sao chép URL của trang quản lý có dạng `https://vbook-opds.example/?library=MA_THU_VIEN` và gửi cho người khác. Người chưa đăng nhập sẽ thấy kệ **chỉ xem**: có thể duyệt danh mục, tìm theo tên sách/tác giả/thể loại và tải sách, không cần username hay password. Họ không thấy các nút sửa sách, xóa sách, quản lý nguồn hoặc thông tin khôi phục. Chủ thư viện đang đăng nhập vẫn thấy trang quản lý; nút **Đăng nhập quản lý** trên kệ chia sẻ đưa chủ thư viện đến form đăng nhập.
+
+Kết quả tìm kiếm OPDS được lấy lần lượt từ các trang và thư mục con của nguồn đang bật. Khi còn trang nguồn chưa đọc, kệ hiện **Trang sau** để tiếp tục tìm; một trang chưa có kết quả chưa có nghĩa là toàn bộ kệ không có sách phù hợp. Link chia sẻ công khai cho bất kỳ ai có link, nên chỉ thêm nguồn và sách bạn muốn chia sẻ.
+
 ### Đăng nhập lại và khôi phục
 
 Để đăng nhập lại, nhập mã thư viện, tên đăng nhập và mật khẩu quản lý tại tab **Đăng nhập**. Nếu quên mật khẩu, dùng tab **Khôi phục** cùng mã khôi phục đã lưu.

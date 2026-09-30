@@ -357,6 +357,19 @@ test('aggregate shelf traverses source pages and nested feeds without repeating 
   }
   assert.equal(seen,13);assert.ok(pages>1);
   assert.equal((await h.req('/o/'+a.library.shortId+'/all?cursor=invalid','GET',undefined,auth(a))).status,400);
+  const publicInfo=await(await h.req('/api/public/libraries/'+a.library.id,'GET',undefined,{Cookie:''})).json() as any;
+  assert.deepEqual(publicInfo.library,{id:a.library.id,shortId:a.library.shortId,name:'Kệ chung',hasDrive:false});
+  assert.ok(!JSON.stringify(publicInfo).includes('password'));
+  assert.equal((await h.req('/api/public/libraries/unknown','GET',undefined,{Cookie:''})).status,404);
+  const search=await(await h.req('/o/'+a.library.shortId+'/all?q=S%C3%A1ch%20m%E1%BA%ABu','GET',undefined,{Cookie:'',Accept:'application/opds+json'})).json() as any;
+  assert.ok(search.publications.length>0);
+  assert.ok(search.links.some((link:any)=>link.rel.includes('search')));
+  const searchNext=search.links.find((link:any)=>link.rel.includes('next'))?.href;
+  assert.ok(searchNext);
+  const wrongQuery=new URL(searchNext);wrongQuery.searchParams.set('q','khac');
+  assert.equal((await h.req(wrongQuery.pathname+wrongQuery.search,'GET',undefined,{Cookie:''})).status,400);
+  const noMatch=await(await h.req('/o/'+a.library.shortId+'/all?q=khong-co-sach','GET',undefined,{Cookie:'',Accept:'application/opds+json'})).json() as any;
+  assert.equal(noMatch.publications.length,0);
 });
 test('aggregate shelf keeps working sources visible when another feed becomes unavailable',async()=>{
   const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chung',drive:'https://catalog.example/broken\nhttps://catalog.example/opds',username:'owner',password:'long-password-123'}));
@@ -545,6 +558,32 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     assert.equal(d.querySelector('#secret-values')!.textContent,'');assert.equal(d.querySelectorAll('#items .book').length,0);
     assert.deepEqual(errors,[]);
   } finally {dom.window.close();}
+});
+test('shared library URL opens a read-only searchable shelf without login',async()=>{
+  const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chia sẻ',drive:'https://catalog.example/opds',username:'owner',password:'long-password-123'}));
+  const dom=new JSDOM(libraryHtml,{url:'https://library.example/?library='+a.library.id,runScripts:'outside-only'}),w=dom.window,d=w.document;
+  w.fetch=(async(path:string,init:any={})=>app.request('https://library.example'+path,{...init,headers:{Cookie:'',...init.headers}},h.env as any)) as any;
+  const wait=async(predicate:()=>boolean)=>{for(let i=0;i<300&&!predicate();i++)await new Promise(resolve=>setTimeout(resolve,5));assert.ok(predicate(),'public shelf did not finish loading');};
+  try{
+    w.eval(libraryClient);
+    await wait(()=>!(d.querySelector('#public-library') as HTMLElement).hidden&&d.querySelectorAll('#public-items .public-card').length>0);
+    assert.equal((d.querySelector('#dashboard') as HTMLElement).hidden,true);
+    assert.equal((d.querySelector('#welcome') as HTMLElement).hidden,true);
+    assert.match(d.querySelector('#public-library-name')!.textContent!,/Kệ chia sẻ/);
+    assert.ok(d.querySelector('#public-items')!.textContent!.includes('Sách mẫu'));
+    assert.ok(d.querySelector('#public-items a[href*="/o/"]'));
+    const input=d.querySelector('#public-search-input') as HTMLInputElement;input.value='Sách mẫu';
+    d.querySelector('#public-search-form')!.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await wait(()=>d.querySelector('#public-status')!.textContent!.includes('1 sách'));
+    assert.ok(d.querySelector('#public-items')!.textContent!.includes('Sách mẫu'));
+    input.value='khong-co-sach';
+    d.querySelector('#public-search-form')!.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await wait(()=>d.querySelector('#public-items')!.textContent!.includes('Không tìm thấy sách phù hợp'));
+    assert.ok(!d.querySelector('#public-items')!.textContent!.includes('Sách mẫu'));
+    (d.querySelector('#public-login') as HTMLButtonElement).click();
+    assert.equal((d.querySelector('#welcome') as HTMLElement).hidden,false);
+    assert.equal((d.querySelector('#public-library') as HTMLElement).hidden,true);
+  }finally{dom.window.close();}
 });
 test('scan results show 50 books per page and selection stays on the visible page',async()=>{
   const original=tree.get(ROOT);
