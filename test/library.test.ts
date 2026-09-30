@@ -359,6 +359,8 @@ test('aggregate shelf traverses source pages and nested feeds without repeating 
   assert.equal((await h.req('/o/'+a.library.shortId+'/all?cursor=invalid','GET',undefined,auth(a))).status,400);
   const publicInfo=await(await h.req('/api/public/libraries/'+a.library.id,'GET',undefined,{Cookie:''})).json() as any;
   assert.deepEqual(publicInfo.library,{id:a.library.id,shortId:a.library.shortId,name:'Kệ chung',hasDrive:false});
+  const shortPublicInfo=await(await h.req('/api/public/libraries/'+a.library.shortId,'GET',undefined,{Cookie:''})).json() as any;
+  assert.deepEqual(shortPublicInfo.library,publicInfo.library);
   assert.ok(!JSON.stringify(publicInfo).includes('password'));
   assert.equal((await h.req('/api/public/libraries/unknown','GET',undefined,{Cookie:''})).status,404);
   const search=await(await h.req('/o/'+a.library.shortId+'/all?q=S%C3%A1ch%20m%E1%BA%ABu','GET',undefined,{Cookie:'',Accept:'application/opds+json'})).json() as any;
@@ -515,6 +517,13 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     click('#copy-opds');await wait(()=>d.querySelector('#notice')!.closest('dialog')?.id==='connection');
     assert.equal(d.querySelector('#custom-opds-password'),null);
     click('[data-close="connection"]');await wait(()=>!d.querySelector('#notice')!.closest('dialog'));
+    click('#share-button');assert.ok(d.querySelector('#share')!.hasAttribute('open'));
+    const shareUrl=(d.querySelector('#share-url') as HTMLInputElement).value;
+    assert.equal(new URL(shareUrl).origin,'https://library.example');
+    assert.equal(new URL(shareUrl).searchParams.get('library'),new URL((d.querySelector('#opds-url') as HTMLInputElement).value).pathname.split('/').pop());
+    click('#copy-share');await wait(()=>d.querySelector('#notice')!.closest('dialog')?.id==='share');
+    assert.match(d.querySelector('#notice')!.textContent!,/Link đã được chọn/);
+    click('[data-close="share"]');await wait(()=>!d.querySelector('#notice')!.closest('dialog'));
     click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));assert.match(d.querySelector('#drive-status')!.textContent!,/Đã kết nối/);
     field('#drive-form','drive','https://drive.google.com/drive/folders/'+ROOT);submit('#drive-form');await wait(()=>d.querySelector('#notice')!.textContent==='Đã cập nhật nguồn Google Drive.');assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');assert.equal((d.querySelector('#drive-remove') as HTMLButtonElement).hidden,false);
     field('#source-form','urls','https://catalog.example/feed/m_TEST-123_Z');field('#source-form','username','shared');field('#source-form','password','source-secret');submit('#source-form');
