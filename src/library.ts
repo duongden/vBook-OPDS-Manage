@@ -360,6 +360,12 @@ api.post('/api/libraries/:id/source-books/hide', async c => {
   await c.env.DB.batch(rows.map(row => c.env.DB.prepare('INSERT OR IGNORE INTO opds_exclusions (library_id, source_id, book_key, created_at) VALUES (?, ?, ?, ?)').bind(lib.id, row.sourceId, row.key, Date.now())));
   return c.json({ success: true, count: rows.length });
 });
+api.get('/api/libraries/:id/source-books/history', async c => {
+  const lib = c.get('library');
+  const rows = (await c.env.DB.prepare('SELECT e.source_id AS sourceId, e.created_at AS removedAt FROM opds_exclusions e JOIN opds_sources s ON s.id = e.source_id AND s.library_id = e.library_id WHERE e.library_id = ? ORDER BY e.created_at DESC')
+    .bind(lib.id).all<{sourceId:string;removedAt:number}>()).results;
+  return c.json({ events: rows });
+});
 async function serveSourceDownload(c: C, row: OpdsSourceRow) {
   const lib = c.get('library');
   const value = await revealData<{url:string}>(c.env.MASK_SECRET, `opds-download:${lib.id}:${row.id}`, c.req.query('ref') || '');

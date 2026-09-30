@@ -310,6 +310,17 @@ test('multiple pasted OPDS URLs create one aggregate catalog without Drive',asyn
   const removedDrive=await h.req(base(a)+'/drive','DELETE',{});assert.equal(removedDrive.status,200);assert.equal((await removedDrive.json() as any).hasDrive,false);
   assert.deepEqual((await (await h.req(base(a)+'/items')).json() as any).items,[]);
 });
+test('hidden OPDS history retains source association until the source is removed',async()=>{
+  const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chung',drive:'https://catalog.example/opds',username:'owner',password:'long-password-123'}));
+  const source=(await(await h.req(base(a)+'/sources')).json() as any).sources[0];
+  const book=(await(await h.req(base(a)+'/scan','POST',{sourceId:source.id})).json() as any).items.find((item:any)=>!item.isFolder);
+  assert.equal((await h.req(base(a)+'/source-books/hide','POST',{books:[{sourceId:source.id,key:book.key}]})).status,200);
+  const history=await(await h.req(base(a)+'/source-books/history')).json() as any;
+  assert.equal(history.events.length,1);assert.equal(history.events[0].sourceId,source.id);assert.ok(history.events[0].removedAt>0);
+  assert.ok(!JSON.stringify(history).includes(source.sourceUrl),'history returns source ids but keeps original URL behind explicit reveal');
+  await h.req(base(a)+'/sources/'+source.id,'DELETE',{});
+  assert.deepEqual((await(await h.req(base(a)+'/source-books/history')).json() as any).events,[]);
+});
 test('OPDS title cleanup persists across scan, aggregate feed and source feed',async()=>{
   const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kho OPDS',drive:'https://catalog.example/prefixed',username:'owner',password:'long-password-123'}));
   const source=(await(await h.req(base(a)+'/sources')).json() as any).sources[0];
@@ -519,8 +530,17 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     assert.match(d.querySelector('#scan-status')!.textContent!,/7 file sách/);assert.ok(d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#items')!.textContent!.includes('OPDS'));assert.ok(d.querySelector('#items')!.textContent!.includes('ước đoán'));
     assert.ok(!d.querySelector('#items')!.textContent!.includes(' · '+(d.querySelector('[data-book-delete]') as HTMLButtonElement).dataset.bookDelete));
     const externalDelete=d.querySelector('[data-book-delete]') as HTMLButtonElement,externalDownload=d.querySelector('a[href*="/sources/"][href*="/download?ref="]');assert.ok(externalDelete);assert.ok(externalDownload);
+    click('[data-book-source]');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));assert.match(d.querySelector('#source-list')!.textContent!,/https:\/\/catalog\.example\/opds/);
+    let copiedSource='';Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async(value:string)=>{copiedSource=value;}}});
+    click('[data-source-copy]');await wait(()=>copiedSource==='https://catalog.example/opds');
+    click('[data-close="sources"]');
     click('#select-all');assert.equal(d.querySelector('#selected-count')!.textContent,'7 đã chọn');assert.equal((d.querySelector('#bulk-apply') as HTMLButtonElement).disabled,false);assert.equal((d.querySelector('#bulk-delete-opds') as HTMLButtonElement).hidden,false);assert.equal(d.querySelector('#bulk-delete-opds')!.parentElement?.className,'section-actions');
     (d.querySelector('[data-book-delete]') as HTMLButtonElement).click();await wait(()=>!d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#notice')!.textContent!.includes('Đã loại sách'));
+    click('#sources-button');click('#load-hidden-history');await wait(()=>d.querySelectorAll('.history-row').length===1);
+    assert.match(d.querySelector('#hidden-history-status')!.textContent!,/Đã loại 1 sách/);
+    assert.ok(!d.querySelector('#hidden-history-list')!.textContent!.includes('https://catalog.example/opds'));
+    click('[data-history-reveal]');assert.match(d.querySelector('#hidden-history-list')!.textContent!,/https:\/\/catalog\.example\/opds/);
+    click('[data-close="sources"]');
     click('#logout');await wait(()=>!(d.querySelector('#welcome') as HTMLElement).hidden);
     assert.equal(d.querySelector('#secret-values')!.textContent,'');assert.equal(d.querySelectorAll('#items .book').length,0);
     assert.deepEqual(errors,[]);

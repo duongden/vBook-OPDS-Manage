@@ -137,6 +137,8 @@ Khi quét OPDS, nếu nguồn có mã ngôn ngữ thì thư viện dùng mã đ�
 
 Mỗi dòng sách có nút tải. Với sách OPDS, nút thùng rác chỉ loại sách khỏi catalog tổng hợp của bạn; file ở nguồn gốc không bị xóa. Có thể dùng checkbox để chọn nhiều sách OPDS rồi bấm **Xóa sách OPDS đã chọn** ở hàng nút phía trên, cạnh **Nguồn sách** và **Kết nối vBook**. Nút chỉ hiện khi đã chọn sách OPDS. Nếu chọn lẫn sách Drive và OPDS, nút gán ngôn ngữ chỉ áp dụng cho sách Drive.
 
+Để xem link gốc của một sách OPDS còn trên kệ, bấm **Xem link nguồn** ngay dưới sách. Với sách đã loại khỏi kệ, mở **Nguồn sách → Lịch sử xóa sách OPDS → Xem lịch sử xóa**. Trang nhóm các lượt xóa theo nguồn, hiển thị mã nguồn và thời điểm xóa; bấm **Hiện link** hoặc **Sao chép link gốc** cho nguồn cần báo. Link được ẩn theo mặc định. Lịch sử cũ chỉ lưu mã sách và thời điểm xóa, nên không hiện lại tên sách đã loại; nếu xóa cả nguồn, các bản ghi xóa sách của nguồn đó cũng bị xóa.
+
 Các thay đổi chỉ tác động đến thông tin hiển thị trong thư viện. Tên và nội dung file trên Drive không bị sửa.
 
 Nếu thư viện chỉ có nguồn OPDS, khu vực sách Drive sẽ trống; đây không phải lỗi.
