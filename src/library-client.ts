@@ -11,7 +11,7 @@ function applyTheme(theme,persist=false){document.documentElement.dataset.theme=
 let theme=savedTheme();applyTheme(theme);
 let library=null,csrf='',pageItems=new Map(),scanItems=new Map(),selected=new Set(),view='grid',scanMode=false;
 let trail=[],nextCursor=null,busy=false,editing=null,scanQueue=[],scanSeen=new Set(),scanRunning=false,scanComplete=false,scanPages=0,scanController=null;
-let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0,sources=[],sourceChecks=new Map();
+let activeOpds=null,recoveryCode='',requestEpoch=0,scanEpoch=0,sources=[],sourceChecks=new Map(),sourceImportErrors=[];
 const svgIcon=name=>({
  copy:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
  trash:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>',
@@ -151,18 +151,35 @@ async function submitForm(form,action){const buttons=form.querySelectorAll('butt
 function splitUrls(value){return String(value||'').split(/\r?\n/).map(url=>url.trim()).filter(Boolean);}
 function isDriveInput(value){if(!value.includes('://'))return true;try{return new URL(value).hostname==='drive.google.com';}catch{return false;}}
 function pastedUrls(value,max=MAX_PASTED_OPDS_URLS){const urls=[...new Set(splitUrls(value))];if(urls.length>max)throw new Error(max===MAX_PASTED_OPDS_URLS?'Mỗi lần nhập tối đa 99 URL OPDS, mỗi URL trên một dòng.':'Mỗi lần nhập tối đa 99 URL OPDS và một link Drive, mỗi link trên một dòng.');return urls;}
+function renderImportErrors(){
+ $('#source-import-errors').innerHTML=sourceImportErrors.map((item,index)=>'<article class="source-row"><div><strong>URL OPDS thứ '+item.index+'</strong><p class="error">'+escapeHtml(item.message)+'</p><code class="source-error-url">'+escapeHtml(item.url)+'</code></div><button type="button" class="danger" data-import-delete="'+index+'">Xóa link lỗi</button></article>').join('');
+}
 function updateUrlCount(){
  const createLines=splitUrls($('#create textarea[name="drive"]').value),createUnique=[...new Set(createLines)],drive=createUnique.filter(isDriveInput).length,opds=createUnique.length-drive;
  const createCount=$('#create-url-count');createCount.textContent='Đã nhập '+opds+' / 99 URL OPDS · '+drive+' / 1 link Drive'+(createLines.length>createUnique.length?' · '+(createLines.length-createUnique.length)+' dòng trùng sẽ bỏ qua':'')+(opds>99||drive>1?' · Vượt giới hạn':'');createCount.classList.toggle('error',opds>99||drive>1);
  const sourceLines=splitUrls($('#source-form textarea[name="urls"]').value),sourceUnique=new Set(sourceLines),sourceCount=$('#source-url-count');sourceCount.textContent='Đã nhập '+sourceUnique.size+' / 99 URL OPDS'+(sourceLines.length>sourceUnique.size?' · '+(sourceLines.length-sourceUnique.size)+' dòng trùng sẽ bỏ qua':'')+(sourceUnique.size>99?' · Vượt giới hạn':'');sourceCount.classList.toggle('error',sourceUnique.size>99);
+ sourceImportErrors=sourceImportErrors.filter(item=>sourceUnique.has(item.url));renderImportErrors();
 }
 ['#create textarea[name="drive"]','#source-form textarea[name="urls"]'].forEach(selector=>$(selector).addEventListener('input',updateUrlCount));updateUrlCount();
 async function addSourceBatches(urls,username='',password='',offset=0){
+ const failed=[];let added=0;
  for(let i=0;i<urls.length;i+=OPDS_BATCH_SIZE){
   const batch=urls.slice(i,i+OPDS_BATCH_SIZE);
-  try{const data=await api(endpoint('/sources'),'POST',{sources:batch.map(url=>({url,username,password}))});sources=data.sources;renderSources();$('#source-progress').textContent='Đã kiểm tra và thêm '+(offset+Math.min(i+batch.length,urls.length))+' / '+(offset+urls.length)+' nguồn OPDS.';notice($('#source-progress').textContent);}
-  catch(error){error.remainingUrls=urls.slice(i);error.addedCount=i;error.message='Nhóm URL '+(offset+i+1)+'–'+(offset+Math.min(i+OPDS_BATCH_SIZE,urls.length))+': '+error.message;$('#source-progress').textContent='Đã thêm '+(offset+i)+' / '+(offset+urls.length)+' nguồn OPDS; nhóm lỗi và các link sau vẫn ở ô nhập.';throw error;}
+  try{const data=await api(endpoint('/sources'),'POST',{sources:batch.map(url=>({url,username,password}))});sources=data.sources;renderSources();added+=batch.length;}
+  catch(error){
+   if(error.status!==400&&error.status!==413){error.failed=failed;error.remainingUrls=[...failed.map(item=>item.url),...urls.slice(i)];error.addedCount=added;throw error;}
+   for(let j=0;j<batch.length;j++){
+    try{const data=await api(endpoint('/sources'),'POST',{sources:[{url:batch[j],username,password}]});sources=data.sources;renderSources();added++;}
+    catch(single){
+     if(single.status!==400&&single.status!==413){single.failed=failed;single.remainingUrls=[...failed.map(item=>item.url),...batch.slice(j),...urls.slice(i+batch.length)];single.addedCount=added;throw single;}
+     failed.push({url:batch[j],index:offset+i+j+1,message:single.message});
+    }
+   }
+  }
+  $('#source-progress').textContent='Đã kiểm tra '+(offset+Math.min(i+batch.length,urls.length))+' / '+(offset+urls.length)+' URL OPDS · đã thêm '+(offset+added)+'.';notice($('#source-progress').textContent);
  }
+ if(failed.length){const error=new Error('Có '+failed.length+' link lỗi. Xem URL và chọn “Xóa link lỗi” bên dưới.');error.failed=failed;error.remainingUrls=failed.map(item=>item.url);error.addedCount=added;throw error;}
+ return added;
 }
 async function hideExternalBooks(books){
  for(let i=0;i<books.length;i+=50){const batch=books.slice(i,i+50);await api(endpoint('/source-books/hide'),'POST',{books:batch.map(book=>({sourceId:book.sourceId,key:book.key}))});batch.forEach(book=>{pageItems.delete(book.key);scanItems.delete(book.key);selected.delete(book.key);});}
@@ -170,6 +187,11 @@ async function hideExternalBooks(books){
 }
 document.addEventListener('click',async event=>{
  const button=event.target.closest('button');if(!button)return;
+ if(button.dataset.importDelete!==undefined){
+  const item=sourceImportErrors[Number(button.dataset.importDelete)];if(!item)return;
+  const input=$('#source-form textarea[name="urls"]');input.value=splitUrls(input.value).filter(url=>url!==item.url).join('\n');
+  sourceImportErrors.splice(Number(button.dataset.importDelete),1);updateUrlCount();notice('Đã xóa link lỗi khỏi ô nhập. Các nguồn đã thêm vẫn được giữ.');return;
+ }
  if(button.dataset.bookDelete){const book=source().get(button.dataset.bookDelete);if(!book||!book.external||!confirm('Loại “'+book.title+'” khỏi catalog tổng hợp? Sách gốc ở nguồn OPDS không bị xóa.'))return;button.disabled=true;try{await hideExternalBooks([book]);notice('Đã loại sách khỏi catalog tổng hợp.');}catch(e){button.disabled=false;notice(e.message,true);}return;}
  if(button.dataset.tab)tab(button.dataset.tab);
  if(button.dataset.close)$('#'+button.dataset.close).close();
@@ -208,8 +230,8 @@ $('#drive-remove').addEventListener('click',async()=>{if(!library.hasDrive||!con
 $('#source-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{
  const values=Object.fromEntries(new FormData(f)),urls=pastedUrls(values.urls);
  if(!urls.length)throw new Error('Nhập ít nhất một URL OPDS.');
- try{$('#source-progress').textContent='Đang kiểm tra 0 / '+urls.length+' nguồn OPDS.';notice($('#source-progress').textContent);await addSourceBatches(urls,values.username||'',values.password||'');f.reset();updateUrlCount();$('#source-progress').textContent='Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.';notice($('#source-progress').textContent);}
- catch(error){if(error.remainingUrls)f.elements.urls.value=error.remainingUrls.join('\n');updateUrlCount();error.message='Đã thêm '+error.addedCount+' / '+urls.length+' nguồn OPDS. Các URL còn lại được giữ trong ô nhập. '+error.message;throw error;}
+ try{sourceImportErrors=[];renderImportErrors();$('#source-progress').textContent='Đang kiểm tra 0 / '+urls.length+' URL OPDS.';notice($('#source-progress').textContent);await addSourceBatches(urls,values.username||'',values.password||'');f.reset();updateUrlCount();$('#source-progress').textContent='Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.';notice($('#source-progress').textContent);}
+ catch(error){if(error.remainingUrls)f.elements.urls.value=error.remainingUrls.join('\n');sourceImportErrors=error.failed||[];updateUrlCount();error.message='Đã thêm '+(error.addedCount||0)+' / '+urls.length+' nguồn OPDS. '+(error.remainingUrls?'Các URL lỗi/chưa xử lý được giữ trong ô nhập. ':'')+error.message;throw error;}
  });});
 $('#check-sources').addEventListener('click',async()=>{
  const button=$('#check-sources'),status=$('#source-check-status'),ids=sources.map(source=>source.id);
