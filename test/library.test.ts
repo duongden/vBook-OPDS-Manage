@@ -380,8 +380,9 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');
     assert.match(d.querySelector('#source-form .form-error')!.textContent!,/Có 1 link lỗi/);
     assert.match(d.querySelector('#source-import-errors')!.textContent!,/http:\/\/invalid.example\/opds/);
-    click('[data-close="sources"]');await wait(()=>!d.querySelector('#notice')!.closest('dialog'));click('#load-more');await wait(()=>d.querySelectorAll('.book').length===6);
-    click('#view-table');assert.equal(d.querySelectorAll('tbody tr').length,6);
+    click('[data-close="sources"]');await wait(()=>!d.querySelector('#notice')!.closest('dialog'));click('#load-more');await wait(()=>d.querySelector('#page-label')!.textContent!.includes('Trang 2'));
+    assert.equal(d.querySelectorAll('.book').length,3);click('#page-prev');assert.equal(d.querySelectorAll('.book').length,3);assert.match(d.querySelector('#page-label')!.textContent!,/Trang 1/);click('#load-more');assert.match(d.querySelector('#page-label')!.textContent!,/Trang 2/);
+    click('#view-table');assert.equal(d.querySelectorAll('tbody tr').length,3);
     click('[data-open]');assert.ok(d.querySelector('#editor')!.hasAttribute('open'));
     field('#edit-form','title','Tên sửa UI');field('#edit-form','language','vi');field('#edit-form','coverUrl','https://images.example/ui.jpg');submit('#edit-form');
     await wait(()=>!d.querySelector('#editor')!.hasAttribute('open'));
@@ -404,6 +405,33 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     assert.deepEqual(errors,[]);
   } finally {dom.window.close();}
 });
+test('scan results show 50 books per page and selection stays on the visible page',async()=>{
+  const original=tree.get(ROOT);
+  tree.set(ROOT,Array.from({length:55},(_,i)=>rootItem('PAGE_BOOK_'+String(i).padStart(8,'0'),'Sách phân trang '+i+'.epub','application/epub+zip')));
+  const h=harness(),a=await h.create();
+  const dom=new JSDOM(libraryHtml,{url:'https://library.example/?library='+a.library.id,runScripts:'outside-only'}),w=dom.window,d=w.document;
+  w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
+  w.AbortController=globalThis.AbortController as any;
+  w.fetch=(async(path:string,init:any={})=>app.request('https://library.example'+path,{...init,headers:{Cookie:h.cookie,...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any)) as any;
+  try{
+    w.eval(libraryClient);
+    for(let i=0;i<300&&(d.querySelector('#dashboard') as HTMLElement).hidden;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    (d.querySelector('#scan-start') as HTMLButtonElement).click();
+    for(let i=0;i<300&&!d.querySelector('#scan-status')!.textContent!.startsWith('Hoàn tất');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.match(d.querySelector('#scan-status')!.textContent!,/55 file sách/);
+    assert.equal(d.querySelectorAll('#items .book').length,50);
+    assert.equal(d.querySelector('#page-label')!.textContent,'Trang 1 / 2');
+    (d.querySelector('#load-more') as HTMLButtonElement).click();
+    assert.equal(d.querySelectorAll('#items .book').length,5);
+    assert.equal(d.querySelector('#page-label')!.textContent,'Trang 2 / 2');
+    (d.querySelector('#select-all') as HTMLInputElement).click();
+    assert.equal(d.querySelector('#selected-count')!.textContent,'5 đã chọn');
+    (d.querySelector('#page-prev') as HTMLButtonElement).click();
+    assert.equal(d.querySelectorAll('#items .book').length,50);
+    assert.equal((d.querySelector('#select-all') as HTMLInputElement).checked,false);
+  }finally{tree.set(ROOT,original!);dom.window.close();}
+});
+
 test('reopened library identifies a failed saved OPDS URL and lets owner remove it',async()=>{
   const h=harness();const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Nguồn lỗi',drive:'https://catalog.example/broken',username:'owner',password:'long-password-123'}));
   const dom=new JSDOM(libraryHtml,{url:'https://library.example/?library='+a.library.id,runScripts:'outside-only'}),w=dom.window,d=w.document;
