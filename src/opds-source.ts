@@ -38,6 +38,8 @@ export function safeOpdsUrl(input: string): URL {
   } catch { return fail(400, 'Nguồn OPDS cần URL HTTPS công khai, không chứa tài khoản, fragment hoặc địa chỉ mạng nội bộ.'); }
 }
 
+export const isGoogleDriveResource = (url: URL): boolean => url.hostname === 'drive.google.com' || url.hostname === 'drive.usercontent.google.com' || url.hostname === 'googleusercontent.com' || url.hostname.endsWith('.googleusercontent.com');
+
 export async function sourceConfig(secret: string, row: OpdsSourceRow): Promise<OpdsSourceConfig> {
   const value = await revealData<OpdsSourceConfig>(secret, `opds-source:${row.library_id}:${row.id}`, row.config_token);
   safeOpdsUrl(value.url);
@@ -109,7 +111,11 @@ export async function proxyHref(secret: string, libraryShortId: string, row: Opd
   if (!href || href.includes('{')) return href;
   let target: URL;
   try { target = safeOpdsUrl(new URL(xmlUnescape(href), base).href); } catch { return href; }
-  if (target.origin !== root.origin) return target.href;
+  if (target.origin !== root.origin) {
+    if (!isGoogleDriveResource(target)) return target.href;
+    const token = await protectData(secret, 'drive-resource', { url: target.href });
+    return `/assets/drive-resource?ref=${encodeURIComponent(token)}`;
+  }
   const token = await protectData(secret, `opds-target:${row.library_id}:${row.id}`, { url: target.href });
   return `/o/${libraryShortId}/s/${row.short_id}?target=${encodeURIComponent(token)}`;
 }

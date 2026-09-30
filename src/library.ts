@@ -5,9 +5,9 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { extractFolderId, fetchDriveFolder, searchDriveFolder } from './drive';
 import { maskFolderId, unmaskFolderId } from './crypto';
 import { Library, getLibrary, presentItems, saveOverride, validateOverrides } from './library-data';
-import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomAccessCode, randomToken, revealData, seal, stringInput, unseal } from './library-security';
+import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, protectData, randomAccessCode, randomToken, revealData, seal, stringInput, unseal } from './library-security';
 import { managedFeed, XML_TYPE } from './library-feed';
-import { fetchOpds, OpdsSourceConfig, OpdsSourceRow, rewriteOpdsBody, safeOpdsUrl, sourceConfig, sourceToken, validateOpds } from './opds-source';
+import { fetchOpds, isGoogleDriveResource, OpdsSourceConfig, OpdsSourceRow, rewriteOpdsBody, safeOpdsUrl, sourceConfig, sourceToken, validateOpds } from './opds-source';
 import { scanOpdsSource, ScannedOpdsItem } from './opds-scan';
 
 export interface LibraryEnv { DB: D1Database; MASK_SECRET: string; GOOGLE_API_KEY: string }
@@ -19,6 +19,41 @@ interface AggregateState { pending: AggregateTask[]; seen: string[]; seenBooks: 
 export const libraryApp = new Hono<Bindings>();
 const COOKIE = '__Host-vbook_session';
 const api = libraryApp;
+const isDriveCover = (value: string): boolean => {
+  try { const url = new URL(value); return url.protocol === 'https:' && (url.hostname === 'drive.google.com' || url.hostname === 'googleusercontent.com' || url.hostname.endsWith('.googleusercontent.com')); }
+  catch { return false; }
+};
+async function privateDriveCovers<T extends {coverUrl:string}>(secret: string, origin: string, items: T[]): Promise<T[]> {
+  return Promise.all(items.map(async item => isDriveCover(item.coverUrl)
+    ? {...item, coverUrl: `${origin}/assets/drive-cover?ref=${encodeURIComponent(await protectData(secret, 'drive-cover', {url:item.coverUrl}))}`} as T
+    : item));
+}
+
+api.get('/assets/drive-cover', async c => {
+  if (!c.env?.MASK_SECRET) return fail(503, 'Chưa cấu hình ảnh bìa Drive.');
+  const token = stringInput(c.req.query('ref'), 16000, 'Tham chiếu ảnh bìa', true);
+  const data = await revealData<{url:string}>(c.env.MASK_SECRET, 'drive-cover', token);
+  if (!isDriveCover(String(data.url || ''))) return fail(400, 'Ảnh bìa Drive không hợp lệ.');
+  let upstream: Response;
+  try { upstream = await fetch(data.url, {headers:{Accept:'image/*'},signal:AbortSignal.timeout(15000)}); }
+  catch { return fail(503, 'Không tải được ảnh bìa Drive.'); }
+  const type = upstream.headers.get('content-type') || '';
+  if (!upstream.ok || !/^image\/(?:jpeg|png|webp|gif|avif)(?:;|$)/i.test(type)) return fail(503, 'Nguồn Drive không trả về ảnh bìa hợp lệ.');
+  if (Number(upstream.headers.get('content-length') || 0) > 5_000_000) return fail(413, 'Ảnh bìa Drive quá lớn.');
+  const bytes = await upstream.arrayBuffer();
+  if (bytes.byteLength > 5_000_000) return fail(413, 'Ảnh bìa Drive quá lớn.');
+  return new Response(bytes,{headers:{'Content-Type':type,'Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'}});
+});
+api.get('/assets/drive-resource', async c => {
+  if (!c.env?.MASK_SECRET) return fail(503, 'Chưa cấu hình nguồn Drive.');
+  const token = stringInput(c.req.query('ref'), 16000, 'Tham chiếu Drive', true);
+  const data = await revealData<{url:string}>(c.env.MASK_SECRET, 'drive-resource', token);
+  const target = safeOpdsUrl(String(data.url || ''));
+  if (!isGoogleDriveResource(target)) return fail(400, 'Link Drive không hợp lệ.');
+  c.header('Cache-Control','private, no-store');
+  c.header('Referrer-Policy','no-referrer');
+  return c.redirect(target.href, 302);
+});
 
 api.use('*', async (c, next) => {
   if (!/^\/(?:api\/(?:libraries|session|recovery)(?:\/|$)|library\/|o\/)/.test(c.req.path)) { await next(); return; }
@@ -468,7 +503,7 @@ async function serveOpds(c: C, feedPath: string, downloadPath: string) {
     ? (await c.env.DB.prepare('SELECT id, short_id, name FROM opds_sources WHERE library_id = ? AND enabled = 1 ORDER BY created_at, name').bind(lib.id).all<{id:string;short_id:string;name:string}>()).results
     : [];
   const sources = sourceRows.length ? [{ id: 'all', title: 'Kệ tổng hợp', href: `${url.origin}/o/${lib.short_id}/all` }] : [];
-  return c.body(managedFeed({ libraryId: lib.id, title: q ? `Tìm kiếm: ${q}` : lib.name, feedUrl: start, downloadUrl: `${url.origin}${downloadPath}`, self: self.href, start, search: searchTemplate, next: data.nextCursor ? next.href : undefined, sources, ...data }, json), 200,
+  return c.body(managedFeed({ libraryId: lib.id, title: q ? `Tìm kiếm: ${q}` : lib.name, feedUrl: start, downloadUrl: `${url.origin}${downloadPath}`, self: self.href, start, search: searchTemplate, next: data.nextCursor ? next.href : undefined, sources, ...data, items: await privateDriveCovers(c.env.MASK_SECRET, url.origin, data.items) }, json), 200,
     { 'Content-Type': `${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`, Vary: 'Accept, Authorization' });
 }
 async function serveAggregate(c: C) {
@@ -518,7 +553,7 @@ async function serveAggregate(c: C) {
     next = `${start}?cursor=${id}`;
   }
   const json = (c.req.header('Accept') || '').includes('application/opds+json');
-  return c.body(managedFeed({libraryId:lib.id,title:'Kệ tổng hợp'+(failed.length?' · '+failed.length+' nguồn lỗi':''),description:failed.length?'Không đọc được: '+failed.map(item=>item.name).join(', ')+'. Mở lại kệ để thử lại hoặc tắt nguồn lỗi.':undefined,feedUrl:start,downloadUrl:start,self,start,next,folderKey:'all',items:books,externalDownloads:downloads,
+  return c.body(managedFeed({libraryId:lib.id,title:'Kệ tổng hợp'+(failed.length?' · '+failed.length+' nguồn lỗi':''),description:failed.length?'Không đọc được: '+failed.map(item=>item.name).join(', ')+'. Mở lại kệ để thử lại hoặc tắt nguồn lỗi.':undefined,feedUrl:start,downloadUrl:start,self,start,next,folderKey:'all',items:await privateDriveCovers(c.env.MASK_SECRET, url.origin, books),externalDownloads:downloads,
     sources: !books.length && next ? [{id:'continue',title:'Tiếp tục tìm sách',href:next}] : []}, json), 200,
     {'Content-Type':`${json ? 'application/opds+json' : XML_TYPE};charset=utf-8`,Vary:'Accept, Authorization'});
 }

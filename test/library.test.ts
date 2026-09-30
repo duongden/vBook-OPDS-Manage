@@ -65,11 +65,13 @@ globalThis.fetch = (async (input: any, init?: any) => {
     if (unavailableSource && (url.pathname === '/broken' || url.pathname === '/broken-two')) return new Response('',{status:unavailableStatus});
     const headers = new Headers(init?.headers);
     if (headers.has('authorization')) assert.equal(headers.get('authorization'), 'Basic '+btoa('shared:source-secret'), 'Upstream credential is only sent by the proxy');
+    if (url.pathname === '/google-link') return new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:fake:google</id><title>Drive links</title><entry><id>urn:fake:drive-book</id><title>Drive book</title><link rel="http://opds-spec.org/acquisition" href="https://drive.google.com/uc?export=download&amp;id=BOOK_FILE_1234567" type="application/epub+zip"/><link rel="http://opds-spec.org/image" href="https://lh3.googleusercontent.com/private-drive-thumbnail" type="image/jpeg"/></entry></feed>',{headers:{'Content-Type':'application/atom+xml'}});
     if (url.pathname === '/book.epub') return new Response('fake-epub', {headers:{'Content-Type':'application/epub+zip','Content-Disposition':'attachment; filename="sample.epub"'}});
     if (url.pathname === '/redirect.epub') return new Response(null,{status:302,headers:{Location:'https://downloads.example/book.epub'}});
     const title = url.pathname === '/sub' ? 'Kệ con' : url.pathname === '/second' ? 'Kho thứ hai' : 'Kho sách được chia sẻ';
     return new Response(`<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:fake:${url.pathname}</id><title>${title}</title><link rel="subsection" href="/sub"/><entry><id>urn:fake:book</id><title>Sách mẫu</title><link rel="http://opds-spec.org/acquisition" href="/${url.pathname === '/redirect' ? 'redirect' : 'book'}.epub" type="application/epub+zip"/><link rel="http://opds-spec.org/image" href="https://images.example/cover.jpg"/></entry></feed>`, {headers:{'Content-Type':'application/atom+xml;charset=utf-8'}});
   }
+  if (url.hostname === 'lh3.googleusercontent.com') return new Response(new Uint8Array([0xff,0xd8,0xff,0xd9]),{headers:{'Content-Type':'image/jpeg','Content-Length':'4'}});
   assert.equal(url.hostname, 'www.googleapis.com', 'Only Google API metadata is fetched by the backend');
   assert.equal(init?.method || 'GET', 'GET', 'Drive remains read-only');
   assert.ok(!url.searchParams.has('alt'), 'No file content fetching');
@@ -192,6 +194,41 @@ test('metadata survives queries, appears in XML and JSON, can be reset; download
   assert.equal((await h.req(base(a)+'/books/'+b.key,'PUT',{ref:b.ref,coverUrl:'javascript:alert(1)'})).status,400);
   assert.equal((await h.req(base(a)+'/books/'+b.key,'DELETE',{ref:b.ref})).status,200);
   const reset=await(await h.req(base(a)+'/items')).json() as any;assert.equal(reset.items[0].title,files[0].name);assert.equal(reset.items[0].coverUrl,'https://images.example/source.jpg');
+});
+test('managed XML and JSON hide Google Drive thumbnail URLs behind a signed cover link',async()=>{
+  const original=files[0].thumbnailLink;
+  files[0].thumbnailLink='https://lh3.googleusercontent.com/private-drive-thumbnail';
+  try{
+    const h=harness(),a=await h.create();
+    const response=await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a));
+    assert.equal(response.status,200);
+    const xml=await response.text();
+    assert.ok(!xml.includes('googleusercontent.com'));
+    assert.ok(!xml.includes(files[0].id));
+    const href=xml.match(/rel="http:\/\/opds-spec\.org\/image" href="([^"]+)"/)?.[1];assert.ok(href);
+    const image=new URL(href);
+    assert.equal(image.origin,'https://library.example');
+    assert.equal(image.pathname,'/assets/drive-cover');
+    const cover=await h.req(image.pathname+image.search);
+    assert.equal(cover.status,200);assert.equal(cover.headers.get('content-type'),'image/jpeg');
+    assert.deepEqual(Array.from(new Uint8Array(await cover.arrayBuffer())),[0xff,0xd8,0xff,0xd9]);
+    const json=await(await h.req('/o/'+a.library.shortId,'GET',undefined,{...auth(a),Accept:'application/opds+json'})).text();
+    assert.ok(!json.includes('googleusercontent.com'));
+    assert.match(json,/\/assets\/drive-cover\?ref=/);
+  }finally{files[0].thumbnailLink=original;}
+});
+test('individual OPDS source XML masks external Google Drive links',async()=>{
+  const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chung',drive:'https://catalog.example/google-link',username:'owner',password:'long-password-123'}));
+  const source=(await(await h.req(base(a)+'/sources')).json() as any).sources[0];
+  const xml=await(await h.req(new URL(source.url).pathname,'GET',undefined,auth(a))).text();
+  assert.ok(!xml.includes('drive.google.com'));
+  assert.ok(!xml.includes('googleusercontent.com'));
+  assert.ok(!xml.includes('BOOK_FILE_1234567'));
+  const links=[...xml.matchAll(/href="([^\"]+)"/g)].map(match=>match[1].replace(/&amp;/g,'&'));
+  const resource=links.find(href=>href.includes('/assets/drive-resource?ref='));assert.ok(resource);
+  const redirected=await h.req(new URL(resource,'https://library.example').pathname+new URL(resource,'https://library.example').search);
+  assert.equal(redirected.status,302);
+  assert.match(redirected.headers.get('location')||'',/^https:\/\/drive\.google\.com\/uc\?/);
 });
 test('external OPDS sources aggregate behind short authenticated proxy links', async()=>{
   const h=harness(),a=await h.create();
