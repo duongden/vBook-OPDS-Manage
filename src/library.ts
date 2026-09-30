@@ -5,7 +5,7 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { extractFolderId, fetchDriveFolder, searchDriveFolder } from './drive';
 import { maskFolderId, unmaskFolderId } from './crypto';
 import { Library, getLibrary, presentItems, saveOverride, validateOverrides } from './library-data';
-import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomToken, revealData, seal, stringInput, unseal } from './library-security';
+import { base64url, bookKey, checkPassword, digest, equal, fail, hashPassword, passwordInput, randomAccessCode, randomToken, revealData, seal, stringInput, unseal } from './library-security';
 import { managedFeed, XML_TYPE } from './library-feed';
 import { fetchOpds, OpdsSourceConfig, OpdsSourceRow, rewriteOpdsBody, safeOpdsUrl, sourceConfig, sourceToken, validateOpds } from './opds-source';
 import { scanOpdsSource, ScannedOpdsItem } from './opds-scan';
@@ -150,7 +150,7 @@ api.post('/api/libraries', async c => {
   }
   if (initialOpds.length > 10) fail(400, 'Tối đa 10 nguồn OPDS khi tạo thư viện.');
   if (folder) folder = await validateDriveFolder(c, folder);
-  const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomToken(), opds = randomToken();
+  const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomAccessCode(), opds = randomAccessCode();
   const sources = await Promise.all(initialOpds.map(async (source, index) => {
     try { return await prepareSource(c.env.MASK_SECRET, id, source); }
     catch (error) { return sourceInputError(error, index, initialOpds.length); }
@@ -171,7 +171,7 @@ api.post('/api/session', async c => {
   const id = stringInput(body.libraryId, 80, 'Mã thư viện', true);
   const username = stringInput(body.username, 80, 'Tên đăng nhập', true);
   const password = passwordInput(body.password);
-  const lib = await c.env.DB.prepare('SELECT * FROM libraries WHERE id = ?').bind(id).first<Library>();
+  const lib = await c.env.DB.prepare('SELECT * FROM libraries WHERE id = ? OR short_id = ?').bind(id, id).first<Library>();
   const valid = await checkPassword(password, lib?.password_hash || 'dummy.invalid', c.env.MASK_SECRET);
   if (!lib || !valid || !equal(username, lib.username)) return fail(401, 'Mã thư viện, tài khoản hoặc mật khẩu không đúng.');
   if (!lib.password_hash.startsWith('p1.')) {
@@ -192,15 +192,15 @@ api.post('/api/recovery', async c => {
   await rateLimit(c, 'recovery', 8);
   const body = await jsonBody(c), id = stringInput(body.libraryId, 80, 'Mã thư viện', true);
   const code = stringInput(body.code, 100, 'Mã khôi phục', true), password = passwordInput(body.password);
-  const lib = await c.env.DB.prepare('SELECT * FROM libraries WHERE id = ?').bind(id).first<Library>();
+  const lib = await c.env.DB.prepare('SELECT * FROM libraries WHERE id = ? OR short_id = ?').bind(id, id).first<Library>();
   const hashed = await digest(code);
   if (!lib || !equal(lib.recovery_hash, hashed)) return fail(401, 'Mã khôi phục không đúng hoặc đã sử dụng.');
-  const next = randomToken(), opds = randomToken();
+  const next = randomAccessCode(), opds = randomAccessCode();
   const updated = await c.env.DB.prepare('UPDATE libraries SET password_hash = ?, recovery_hash = ?, opds_hash = ?, auth_version = auth_version + 1 WHERE id = ? AND recovery_hash = ? AND auth_version = ?')
-    .bind(await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(next), await digest(`reader:${opds}`), id, hashed, lib.auth_version).run();
+    .bind(await hashPassword(password, undefined, c.env.MASK_SECRET), await digest(next), await digest(`reader:${opds}`), lib.id, hashed, lib.auth_version).run();
   if (updated.meta.changes !== 1) fail(409, 'Mã khôi phục đã được sử dụng.');
-  await c.env.DB.prepare('DELETE FROM sessions WHERE library_id = ? AND auth_version < ?').bind(id, lib.auth_version + 1).run();
-  return c.json({ library: publicLibrary(lib), csrf: await startSession(c, id, lib.auth_version + 1), recoveryCode: next, opds: credentials(c, lib, opds) });
+  await c.env.DB.prepare('DELETE FROM sessions WHERE library_id = ? AND auth_version < ?').bind(lib.id, lib.auth_version + 1).run();
+  return c.json({ library: publicLibrary(lib), csrf: await startSession(c, lib.id, lib.auth_version + 1), recoveryCode: next, opds: credentials(c, lib, opds) });
 });
 
 api.use('/api/libraries/:id/*', async (c, next) => {
@@ -220,7 +220,7 @@ api.post('/api/libraries/:id/password', async c => {
   return c.json({ csrf: await startSession(c, lib.id, lib.auth_version + 1) });
 });
 api.post('/api/libraries/:id/opds-credentials', async c => {
-  const password = randomToken(), lib = c.get('library');
+  const password = randomAccessCode(), lib = c.get('library');
   await c.env.DB.prepare('UPDATE libraries SET opds_hash = ? WHERE id = ?').bind(await digest(`reader:${password}`), lib.id).run();
   return c.json({ opds: credentials(c, lib, password) });
 });

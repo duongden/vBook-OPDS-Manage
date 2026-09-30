@@ -11,6 +11,8 @@ function decode(value: string): Uint8Array {
   return Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 }
 export const randomToken = () => base64url(crypto.getRandomValues(new Uint8Array(32)));
+// 96 bits fit in 16 URL-safe characters and are easy to copy into a reader.
+export const randomAccessCode = () => base64url(crypto.getRandomValues(new Uint8Array(12)));
 export async function digest(value: string): Promise<string> {
   return base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(value))));
 }

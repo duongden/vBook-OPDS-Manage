@@ -38,9 +38,10 @@ function tab(name){document.querySelectorAll('.access-form').forEach(f=>f.hidden
 function showSecrets(data){if(data.opds)activeOpds=data.opds;if(data.recoveryCode)recoveryCode=data.recoveryCode;renderConnection();$('#connection').showModal();}
 function renderConnection(){
  if(!library)return;$('#opds-url').value=location.origin+(library.shortId?'/o/'+library.shortId:'/library/'+library.id+'/opds');
- $('#secret-values').innerHTML='<div class="secret">Mã thư viện<code>'+escapeHtml(library.id)+'</code></div>'+
- (activeOpds?'<div class="secret">Tài khoản OPDS: <strong>reader</strong><br>Mật khẩu OPDS (lưu lại ngay)<code>'+escapeHtml(activeOpds.password)+'</code></div>':'')+
- (recoveryCode?'<div class="secret">Mã khôi phục — lưu riêng, không nhập vào vBook<code>'+escapeHtml(recoveryCode)+'</code></div>':'');
+ $('#secret-values').innerHTML='<div class="secret">Tên đăng nhập vBook<code>reader</code><button type="button" data-copy-secret="username">Sao chép tên</button></div>'+
+ (activeOpds?'<div class="secret">Mật khẩu OPDS cho vBook<code>'+escapeHtml(activeOpds.password)+'</code><button type="button" data-copy-secret="opds">Sao chép mật khẩu</button></div>':'<p class="muted">Nếu đã quên mật khẩu OPDS, bấm “Tạo lại mật khẩu OPDS” bên dưới.</p>')+
+ '<div class="secret">Mã đăng nhập thư viện (dùng trên web, không nhập vào vBook)<code>'+escapeHtml(library.shortId||library.id)+'</code><button type="button" data-copy-secret="library">Sao chép mã</button></div>'+
+ (recoveryCode?'<div class="secret">Mã khôi phục (chỉ dùng khi quên mật khẩu quản lý)<code>'+escapeHtml(recoveryCode)+'</code><button type="button" data-copy-secret="recovery">Sao chép mã khôi phục</button></div>':'');
 }
 function renderSources(){
  $('#source-count').textContent=String(sources.length+(library?.hasDrive?1:0));
@@ -63,7 +64,7 @@ async function enter(data,autoScan=true){
  library=data.library;csrf=data.csrf;sourceChecks.clear();sourceCheckComplete=false;selectedSourceIds.clear();pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
  $('#welcome').hidden=true;$('#dashboard').hidden=false;$('#logout').hidden=false;$('#account-button').hidden=false;$('#library-name').textContent=library.name;
  history.replaceState(null,'','/?library='+encodeURIComponent(library.id));
- $('#account-info').textContent='Mã thư viện: '+library.id+' · Tên đăng nhập: '+library.username;
+ $('#account-info').textContent='Mã thư viện: '+(library.shortId||library.id)+' · Tên đăng nhập: '+library.username;
  $('#scan-status').textContent='Chưa quét toàn thư viện. Số liệu hiện chỉ thuộc dữ liệu đã tải.';scanControls();
  notice('');await Promise.all([browse(false),loadSources()]);if(data.opds||data.recoveryCode)showSecrets(data);
  if(autoScan&&!library.hasDrive&&sources.some(source=>source.enabled))startScan(true);
@@ -251,6 +252,7 @@ $('#account-button').addEventListener('click',()=>$('#account').showModal());
 $('#sources-button').addEventListener('click',()=>{renderSources();$('#sources').showModal();});
 $('#opds-button').addEventListener('click',()=>{renderConnection();$('#connection').showModal();});
 $('#copy-opds').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('#opds-url').value);$('#copy-opds').textContent='Đã sao chép';notice('Đã sao chép URL OPDS.');}catch{$('#opds-url').select();$('#copy-opds').textContent='Hãy sao chép link đã chọn';notice('Trình duyệt không cho sao chép tự động. URL đã được chọn, hãy sao chép thủ công.',true);}});
+$('#secret-values').addEventListener('click',async event=>{const button=event.target.closest('[data-copy-secret]');if(!button)return;const kind=button.dataset.copySecret,value=kind==='username'?'reader':kind==='opds'?activeOpds?.password:kind==='library'?(library?.shortId||library?.id):recoveryCode;if(!value)return;try{await navigator.clipboard.writeText(value);notice('Đã sao chép '+(kind==='opds'?'mật khẩu OPDS':kind==='username'?'tên đăng nhập':'mã')+'.');}catch{const code=button.parentElement.querySelector('code'),range=document.createRange();range.selectNodeContents(code);getSelection().removeAllRanges();getSelection().addRange(range);notice('Trình duyệt không cho sao chép tự động. Nội dung đã được chọn để bạn sao chép thủ công.',true);}});
 $('#rotate-opds').addEventListener('click',async()=>{if(!confirm('Mật khẩu OPDS cũ sẽ hết hiệu lực. Bạn sẽ cần cập nhật lại trong vBook.'))return;$('#rotate-opds').disabled=true;try{const data=await api(endpoint('/opds-credentials'),'POST',{});activeOpds=data.opds;renderConnection();notice('Đã tạo mật khẩu OPDS mới. Hãy lưu lại và cập nhật trong vBook.');}catch(e){notice(e.message,true);}finally{$('#rotate-opds').disabled=false;}});
 $('#password-form').addEventListener('submit',event=>{event.preventDefault();const f=event.currentTarget;submitForm(f,async()=>{const data=await api(endpoint('/password'),'POST',Object.fromEntries(new FormData(f)));csrf=data.csrf;f.reset();$('#account').close();notice('Đã đổi mật khẩu và kết thúc các phiên cũ.');});});
 $('#delete-form').addEventListener('submit',event=>{event.preventDefault();if(!confirm('Xóa vĩnh viễn tài khoản thư viện và metadata chỉnh sửa? File Drive không bị ảnh hưởng.'))return;const f=event.currentTarget;submitForm(f,async()=>{await api(endpoint('/delete'),'POST',Object.fromEntries(new FormData(f)));f.reset();leave();notice('Đã xóa dữ liệu quản lý thư viện.');});});

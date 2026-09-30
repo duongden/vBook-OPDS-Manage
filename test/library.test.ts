@@ -127,6 +127,8 @@ test('creation uses encrypted source and hashes; session CSRF, Origin and accoun
   assert.ok(!JSON.stringify(stored).includes('long-password'));assert.ok(!JSON.stringify(stored).includes(a.opds.password));
   assert.match(stored.root_token as string,/^m_/);
   assert.match(a.library.shortId,/^[\w-]{12}$/);
+  assert.match(a.opds.password,/^[\w-]{16}$/);
+  assert.match(a.recoveryCode,/^[\w-]{16}$/);
   assert.equal(a.opds.url,'https://library.example/o/'+a.library.shortId);
   assert.equal((await h.req(base(a)+'/items')).status,200);
   assert.equal((await h.req('/api/libraries/another/items')).status,403);
@@ -137,6 +139,8 @@ test('creation uses encrypted source and hashes; session CSRF, Origin and accoun
   assert.equal((await h.req('/library/'+a.library.id+'/opds?auth='+btoa('attacker:pass'),'GET',undefined,{Authorization:'Basic '+btoa('attacker:pass')})).status,401);
   assert.equal((await h.req('/library/'+a.library.id+'/opds')).status,401);
   assert.equal((await h.req('/o/'+a.library.shortId)).status,401);
+  assert.equal((await h.req('/0/'+a.library.shortId)).status,404);
+  assert.equal((await h.req('/api/session','POST',{libraryId:a.library.shortId,username:'owner',password:'  long-password-123  '})).status,200);
   const csrfRes=await h.req('/api/session');assert.match(csrfRes.headers.get('cache-control')!,/no-store/);
 });
 test('metadata survives queries, appears in XML and JSON, can be reset; download redirects', async()=>{
@@ -302,7 +306,8 @@ test('logout, password change, recovery, OPDS rotation and delete revoke credent
   const rotated=await(await h.req(base(a)+'/opds-credentials','POST',{})).json() as any;
   assert.equal((await h.req('/library/'+a.library.id+'/opds','GET',undefined,auth(a))).status,401);
   assert.equal((await h.req('/library/'+a.library.id+'/opds','GET',undefined,auth(rotated))).status,200);
-  const rec=await h.signIn(await h.req('/api/recovery','POST',{libraryId:a.library.id,code:a.recoveryCode,password:'recovered-password-123'}));
+  const rec=await h.signIn(await h.req('/api/recovery','POST',{libraryId:a.library.shortId,code:a.recoveryCode,password:'recovered-password-123'}));
+  assert.match(rec.recoveryCode,/^[\w-]{16}$/);assert.match(rec.opds.password,/^[\w-]{16}$/);
   assert.ok(rec.recoveryCode);assert.equal((await h.req('/api/recovery','POST',{libraryId:a.library.id,code:a.recoveryCode,password:'recovered-password-123'})).status,401);
   assert.equal((await h.req('/library/'+a.library.id+'/opds','GET',undefined,auth(rotated))).status,401);
   assert.equal((await h.req('/api/session','DELETE',{})).status,200);
@@ -359,6 +364,9 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     field('#create','drive',ROOT);field('#create','name','Thư viện UI');field('#create','username','owner');field('#create','password','ui-password-12345');submit('#create');
     await wait(()=>d.querySelectorAll('.book').length===3&&d.querySelector('#connection')!.hasAttribute('open'));
     assert.ok(d.querySelector('#secret-values')!.textContent!.includes('reader'));
+    assert.ok(d.querySelector('#secret-values [data-copy-secret="opds"]'));
+    assert.ok(d.querySelector('#secret-values [data-copy-secret="library"]'));
+    assert.ok((d.querySelector('#opds-url') as HTMLInputElement).value.includes('/o/'));
     click('#copy-opds');await wait(()=>d.querySelector('#notice')!.closest('dialog')?.id==='connection');
     click('[data-close="connection"]');await wait(()=>!d.querySelector('#notice')!.closest('dialog'));
     click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));assert.match(d.querySelector('#drive-status')!.textContent!,/Đã kết nối/);

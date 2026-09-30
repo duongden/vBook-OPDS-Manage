@@ -81,9 +81,9 @@ Mở VBook Library, chọn **Tạo thư viện**. Dán **URL OPDS HTTPS thuần*
 
 Bấm **Tạo catalog tổng hợp** và lưu ngay:
 
-- **Mã thư viện** để đăng nhập lại.
-- **Mã khôi phục** để đặt lại mật khẩu quản lý.
-- **Mật khẩu OPDS** để kết nối vBook.
+- **Mã thư viện ngắn** (12 ký tự) để đăng nhập lại; mã UUID cũ vẫn dùng được.
+- **Mã khôi phục** (16 ký tự khi cấp mới) để đặt lại mật khẩu quản lý.
+- **Mật khẩu OPDS** (16 ký tự khi cấp mới) để kết nối vBook.
 
 Mã khôi phục và mật khẩu OPDS chỉ hiển thị khi vừa được cấp. Không nhập mật khẩu quản lý vào vBook.
 
@@ -141,7 +141,7 @@ Trong trang quản lý, bấm **Kết nối vBook**.
 1. Sao chép link OPDS.
 2. Trong vBook, mở **Extension Cloud → OPDS** và tạo nguồn mới.
 3. Dán link vào **URL danh mục**.
-4. Nhập username `reader` và mật khẩu OPDS của thư viện.
+4. Ở ô **Tên**, nhập `reader`. Ở ô **Mật khẩu**, nhập mật khẩu OPDS trong hộp **Kết nối vBook**. Có nút sao chép riêng cho từng giá trị.
 5. Lưu và mở kho sách.
 
 Ví dụ giả, không dùng để đăng nhập:
@@ -157,6 +157,8 @@ Password: mat-khau-mau-khong-dung-that
 ### Đăng nhập lại và khôi phục
 
 Để đăng nhập lại, nhập mã thư viện, tên đăng nhập và mật khẩu quản lý tại tab **Đăng nhập**. Nếu quên mật khẩu, dùng tab **Khôi phục** cùng mã khôi phục đã lưu.
+
+Lỗi `HTTP 404 — not an OPDS catalog at this URL` có thể do gõ nhầm số `0` thay cho chữ `o` trong `/o/`. Hãy sao chép nguyên URL từ **Kết nối vBook**. Khi chưa nhập tài khoản, URL đúng yêu cầu xác thực; mã thư viện và mã khôi phục không dùng trong vBook. Mật khẩu OPDS đã cấp trước bản cập nhật vẫn dùng được; nút **Tạo lại mật khẩu OPDS** sẽ cấp mật khẩu 16 ký tự mới và thu hồi mật khẩu OPDS cũ.
 
 Sau khi khôi phục, mã khôi phục, phiên đăng nhập và mật khẩu OPDS cũ hết hiệu lực. Hãy lưu thông tin mới và cập nhật vBook. Hệ thống không khôi phục qua email.
 
