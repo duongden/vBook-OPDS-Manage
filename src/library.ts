@@ -400,7 +400,7 @@ api.post('/api/libraries/:id/sources/check', async c => {
   const byId = new Map(rows.map(row => [row.id, row]));
   const checks = await Promise.all(ids.map(async id => {
     try { await validateOpds(await sourceConfig(c.env.MASK_SECRET, byId.get(id)!)); return {id,ok:true}; }
-    catch (error) { return {id,ok:false,error: error instanceof Error ? error.message : 'Không đọc được nguồn OPDS.'}; }
+    catch (error) { return {id,ok:false,retryable:error instanceof HTTPException && (error.status === 503 || error.status === 429),error: error instanceof Error ? error.message : 'Không đọc được nguồn OPDS.'}; }
   }));
   return c.json({checks});
 });

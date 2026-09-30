@@ -59,7 +59,15 @@ export async function fetchOpds(config: OpdsSourceConfig, target: URL, signal?: 
   if (target.origin !== root.origin) return fail(403, 'Proxy chỉ truy cập tài nguyên cùng máy chủ với nguồn OPDS.');
   let current = target;
   for (let redirects = 0; redirects <= 3; redirects++) {
-    const response = await fetch(current, { headers: upstreamHeaders(config), redirect: 'manual', signal: signal || AbortSignal.timeout(20000) });
+    let response: Response | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try { response = await fetch(current, { headers: upstreamHeaders(config), redirect: 'manual', signal: signal || AbortSignal.timeout(20000) }); break; }
+      catch (error) {
+        if (signal?.aborted) throw error;
+        if (attempt === 1) return fail(503, 'Tạm thời không kết nối được nguồn OPDS sau 2 lần thử. Hãy kiểm tra lại sau.');
+      }
+    }
+    if (!response) return fail(503, 'Tạm thời không kết nối được nguồn OPDS.');
     if (![301,302,303,307,308].includes(response.status)) return response;
     const location = response.headers.get('location');
     if (!location) return response;
@@ -75,7 +83,7 @@ const xmlEscape = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, 
 
 export async function validateOpds(config: OpdsSourceConfig): Promise<{ url: string; title: string }> {
   const response = await fetchOpds(config, safeOpdsUrl(config.url));
-  if (!response.ok) fail(400, `Nguồn OPDS phản hồi HTTP ${response.status}.`);
+  if (!response.ok) fail(response.status === 408 || response.status === 429 || response.status >= 500 ? 503 : 400, `Nguồn OPDS phản hồi HTTP ${response.status}.`);
   const length = Number(response.headers.get('content-length') || 0);
   if (length > 2_000_000) fail(413, 'Feed OPDS lớn hơn 2 MB.');
   const bytes = await response.arrayBuffer();

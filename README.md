@@ -99,9 +99,9 @@ Trong vBook, **Kệ tổng hợp** hiển thị sách từ các nguồn OPDS đa
 - Nguồn có Basic Auth: nhập tài khoản mà chủ nguồn đã cấp. Một lần thêm dùng chung tài khoản cho các URL trong ô.
 - Sau khi thêm, dùng công tắc để bật/tắt nguồn, biểu tượng sao chép để lấy link ngắn riêng, hoặc biểu tượng thùng rác để gỡ nguồn khỏi thư viện. Thao tác này không xóa sách ở máy chủ nguồn.
 - Để xóa nhiều nguồn bất kỳ, đánh dấu ô chọn ở mép trái từng dòng hoặc **Chọn tất cả**, rồi bấm **Xóa hàng loạt (N)** bên phải cùng hàng với **Kiểm tra link đã lưu**. Nút luôn hiển thị và chỉ bật khi đã chọn ít nhất một nguồn; hệ thống hỏi xác nhận số nguồn trước khi xóa. Các nguồn không được chọn và sách trên máy chủ nguồn được giữ nguyên.
-- Bấm **Kiểm tra link đã lưu** để kiểm tra lại từng nguồn. Giao diện báo số nguồn đã kiểm tra và số lỗi. Dòng không đọc được sẽ hiện lỗi cùng nút **Xóa link lỗi**; sau khi kiểm tra xong, nút **Xóa tất cả N link lỗi** gỡ các nguồn lỗi đã xác định khỏi thư viện sau khi bạn xác nhận. Nút này chỉ xóa nguồn lỗi, giữ nguyên nguồn hoạt động và sách trên máy chủ nguồn. Có thể tắt nguồn lỗi trước nếu chỉ muốn tạm bỏ qua.
+- Bấm **Kiểm tra link đã lưu** để kiểm tra lại từng nguồn. Giao diện báo riêng số **nguồn lỗi** và số **nguồn tạm thời không kết nối**. Lỗi kết nối được thử lại một lần; nếu vẫn không kết nối được, hãy kiểm tra lại sau. Trạng thái này chưa kết luận link hỏng và không được đưa vào nút **Xóa tất cả N link lỗi**. Các nguồn trả lỗi xác định sẽ hiện URL gốc, lý do và nút **Xóa link lỗi**; nút xóa tất cả chỉ gỡ những nguồn này sau khi bạn xác nhận. Bạn vẫn có thể tắt hoặc tự gỡ từng nguồn nếu muốn.
 
-Thư viện chỉ có OPDS sẽ tự quét sách khi mở trang quản lý hoặc sau khi thêm nguồn. Sách hiện dần cùng tiến trình **Đang quét**; nếu một nguồn lỗi trong lúc quét, thông báo ghi tên, URL gốc và lý do, đồng thời dòng nguồn đó hiện nút **Xóa link lỗi**. Các nguồn khác vẫn được xử lý. Bộ đếm **Nguồn sách** là số nguồn đã lưu, còn **Sách trong kết quả** là số sách đã tải trong lần quét hiện tại. Kệ tổng hợp trên vBook tiếp tục hiển thị sách từ nguồn hoạt động và báo số nguồn lỗi trong tiêu đề.
+Thư viện chỉ có OPDS sẽ tự quét sách khi mở trang quản lý hoặc sau khi thêm nguồn. Sách hiện dần cùng tiến trình **Đang quét**; nếu một nguồn không đọc được, thông báo ghi tên, URL gốc và lý do. Lỗi kết nối tạm thời được ghi riêng để bạn thử lại sau, không tự coi là link sai. Các nguồn khác vẫn được xử lý. Bộ đếm **Nguồn sách** là số nguồn đã lưu, còn **Sách trong kết quả** là số sách đã tải trong lần quét hiện tại. Kệ tổng hợp trên vBook tiếp tục hiển thị sách từ nguồn hoạt động và báo số nguồn lỗi trong tiêu đề.
 
 Nếu **Nguồn sách** vẫn hiển thị `10` sau khi bạn đã dán hơn 10 link ở phiên trước, thư viện hiện chỉ lưu 10 nguồn. Vào **Nguồn sách**, dán lại danh sách OPDS; ứng dụng sẽ bỏ qua 10 link đã lưu và tiếp tục thêm các link còn thiếu. Xem tổng số thêm thành công và danh sách URL lỗi trước khi đóng trang.
 
@@ -111,6 +111,7 @@ Nếu **Nguồn sách** vẫn hiển thị `10` sau khi bạn đã dán hơn 10 
 | `Đã kiểm tra X / Y URL OPDS · đã thêm Z` | Đang xử lý; đợi đến khi kiểm tra đủ `Y` link. |
 | `Đã thêm Z / Y nguồn OPDS. Có N link lỗi` | Các nguồn tốt đã được thêm. Xem URL và lý do trong danh sách lỗi, rồi sửa hoặc bấm **Xóa link lỗi**. |
 | `N nguồn lỗi` | Các feed đã lưu hiện không đọc được. Mở dòng lỗi để tắt hoặc bấm **Xóa link lỗi**. |
+| `N nguồn tạm thời không kết nối` | Máy chủ hoặc đường truyền không phản hồi sau hai lần thử. Bấm **Kiểm tra link đã lưu** lại sau; nguồn không bị đưa vào danh sách xóa link lỗi. |
 
 Thông báo và tiến trình nằm trong hộp thoại đang mở, ở phần đầu hộp thoại; chúng không bị lớp nền che. Nếu link gốc đã đổi hoặc tài khoản nguồn hết hạn, hãy gỡ nguồn cũ rồi thêm URL/tài khoản mới.
 

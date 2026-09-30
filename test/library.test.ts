@@ -53,12 +53,16 @@ let incomplete = false;
 let failFolder = '';
 let driveCalls = 0;
 let unavailableSource = false;
+let unavailableStatus = 503;
+let disconnectedSource = false;
+let disconnectedAttempts = 0;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init?: any) => {
   const url = new URL(typeof input === 'string' ? input : input.url || input.toString());
   if (url.hostname === 'catalog.example') {
     if (url.pathname === '/invalid' || url.pathname === '/invalid-two') return new Response('Danh mục đã đổi đường dẫn',{status:400});
-    if (unavailableSource && (url.pathname === '/broken' || url.pathname === '/broken-two')) return new Response('',{status:503});
+    if (disconnectedSource && url.pathname === '/broken') { disconnectedAttempts++; throw new TypeError('Failed to fetch'); }
+    if (unavailableSource && (url.pathname === '/broken' || url.pathname === '/broken-two')) return new Response('',{status:unavailableStatus});
     const headers = new Headers(init?.headers);
     if (headers.has('authorization')) assert.equal(headers.get('authorization'), 'Basic '+btoa('shared:source-secret'), 'Upstream credential is only sent by the proxy');
     if (url.pathname === '/book.epub') return new Response('fake-epub', {headers:{'Content-Type':'application/epub+zip','Content-Disposition':'attachment; filename="sample.epub"'}});
@@ -270,12 +274,27 @@ test('aggregate shelf keeps working sources visible when another feed becomes un
     const results=(await checks.json() as any).checks;
     assert.deepEqual(results.map((item:any)=>item.ok).sort(),[false,true]);
     assert.match(results.find((item:any)=>!item.ok).error,/HTTP 503/);
+    assert.equal(results.find((item:any)=>!item.ok).retryable,true);
     const response=await h.req('/o/'+a.library.shortId,'GET',undefined,{...auth(a),Accept:'application/opds+json'});
     assert.equal(response.status,200);
     const feed=await response.json() as any;
     assert.match(feed.metadata.title,/1 nguồn lỗi/);
     assert.equal(feed.publications.length,1);
   }finally{unavailableSource=false;}
+});
+test('temporary fetch failure is retried and does not mark a valid saved source as broken',async()=>{
+  const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chung',drive:'https://catalog.example/broken',username:'owner',password:'long-password-123'}));
+  const id=(await(await h.req(base(a)+'/sources')).json() as any).sources[0].id;
+  disconnectedAttempts=0;disconnectedSource=true;
+  try{
+    const checks=await h.req(base(a)+'/sources/check','POST',{ids:[id]});
+    const result=(await checks.json() as any).checks[0];
+    assert.equal(result.ok,false);assert.equal(result.retryable,true);
+    assert.match(result.error,/Tạm thời không kết nối/);
+    assert.equal(disconnectedAttempts,2);
+  }finally{disconnectedSource=false;}
+  const checks=await h.req(base(a)+'/sources/check','POST',{ids:[id]});
+  assert.equal((await checks.json() as any).checks[0].ok,true);
 });
 test('same Drive file has isolated overrides and capabilities for each library', async()=>{
   const h=harness(),a=await h.create();const aItems=await(await h.req(base(a)+'/items')).json() as any;
@@ -460,9 +479,10 @@ test('reopened library identifies a failed saved OPDS URL and lets owner remove 
     for(let i=0;i<300&&!d.querySelector('#notice')!.textContent!.includes('https://catalog.example/broken');i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.match(d.querySelector('#notice')!.textContent!,/https:\/\/catalog\.example\/broken/);
     assert.match(d.querySelector('#source-list')!.textContent!,/URL gốc: https:\/\/catalog\.example\/broken/);
-    assert.match(d.querySelector('#source-list')!.textContent!,/Lỗi: Máy chủ phản hồi HTTP 502/);
+    assert.match(d.querySelector('#source-list')!.textContent!,/Tạm thời không kết nối: Máy chủ phản hồi HTTP 502/);
     assert.ok(!d.querySelector('#notice')!.textContent!.includes('Unexpected token'));
-    assert.ok(d.querySelector('#source-list [data-source-delete]')!.textContent!.includes('Xóa link lỗi'));
+    assert.equal((d.querySelector('#delete-failed-sources') as HTMLButtonElement).hidden,true);
+    assert.match(d.querySelector('#source-list [data-source-delete]')!.getAttribute('aria-label')!,/Xóa nguồn/);
     (d.querySelector('#source-list [data-source-delete]') as HTMLButtonElement).click();
     for(let i=0;i<300&&d.querySelectorAll('#source-list .source-row').length;i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.equal(d.querySelectorAll('#source-list .source-row').length,0);
@@ -538,7 +558,7 @@ test('URL counters show unique links and the source form adds more than ten in b
     source.value='https://catalog.example/broken\nhttps://catalog.example/broken-two';source.dispatchEvent(new w.Event('input'));form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
     for(let i=0;i<300&&d.querySelectorAll('#source-list .source-row').length<22;i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.equal(d.querySelectorAll('#source-list .source-row').length,22);
-    unavailableSource=true;
+    unavailableStatus=400;unavailableSource=true;
     (d.querySelector('#check-sources') as HTMLButtonElement).click();
     for(let i=0;i<300&&!d.querySelector('#source-check-status')!.textContent!.includes('22 / 22');i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.match(d.querySelector('#source-check-status')!.textContent!,/2 nguồn lỗi/);
@@ -558,7 +578,7 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.equal(selectedBulk.textContent,'Xóa hàng loạt (0)');
     (d.querySelector('#select-all-sources') as HTMLInputElement).click();
     assert.equal(selectedBulk.textContent,'Xóa hàng loạt (18)');
-  }finally{unavailableSource=false;dom.window.close();}
+  }finally{unavailableSource=false;unavailableStatus=503;dom.window.close();}
 });
 test('creating a library with 25 OPDS links finishes import before opening credentials',async()=>{
   const h=harness(),dom=new JSDOM(libraryHtml,{url:'https://library.example/',runScripts:'outside-only'}),w=dom.window,d=w.document;
