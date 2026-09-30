@@ -70,14 +70,12 @@ function renderSources(){
 function renderHiddenHistory(){
  const groups=new Map();
  hiddenHistory.forEach(event=>{const group=groups.get(event.sourceId)||[];group.push(event.removedAt);groups.set(event.sourceId,group);});
- $('#hidden-history-status').textContent=hiddenHistory.length?'Đã loại '+hiddenHistory.length+' sách OPDS từ '+groups.size+' nguồn. Link gốc của từng nguồn nằm bên dưới.':'Chưa có sách OPDS nào bị loại khỏi kệ.';
+ $('#hidden-history-status').textContent=hiddenHistory.length?'Đã loại '+hiddenHistory.length+' sách OPDS từ '+groups.size+' nguồn. Mã cuối link của từng nguồn nằm bên dưới.':'Chưa có sách OPDS nào bị loại khỏi kệ.';
  $('#hidden-history-list').innerHTML=[...groups].map(([id,times])=>{
   const source=sources.find(item=>item.id===id);if(!source)return '';
   const date=new Date(times[0]).toLocaleString('vi-VN');
-  return '<article class="history-row"><div><h4>'+escapeHtml(source.name)+'</h4><p>Mã link nguồn: <code>'+escapeHtml(sourceLinkCode(source.sourceUrl))+'</code> · '+times.length+' sách đã xóa · gần nhất '+escapeHtml(date)+'</p>'+
-   '<p class="history-url">Link gốc: <code>'+escapeHtml(source.sourceUrl)+'</code></p>'+
-   '<details><summary>Xem thời điểm xóa ('+times.length+')</summary><ol>'+times.map(time=>'<li>'+escapeHtml(new Date(time).toLocaleString('vi-VN'))+'</li>').join('')+'</ol></details></div>'+
-   '<div class="history-actions"><button type="button" data-history-copy="'+escapeHtml(id)+'">Sao chép link gốc</button></div></article>';
+  return '<article class="history-row"><div><h4>'+escapeHtml(source.name)+'</h4><code class="book-source-code">'+escapeHtml(sourceLinkCode(source.sourceUrl))+'</code><p>'+times.length+' sách đã xóa · gần nhất '+escapeHtml(date)+'</p>'+
+   '<details><summary>Xem thời điểm xóa ('+times.length+')</summary><ol>'+times.map(time=>'<li>'+escapeHtml(new Date(time).toLocaleString('vi-VN'))+'</li>').join('')+'</ol></details></div></article>';
  }).join('');
 }
 async function loadSources(){
@@ -112,7 +110,7 @@ function rowActions(book){
 function bookSourceMarkup(book){
  if(!book.external||book.isFolder)return '';
  const item=sources.find(source=>source.id===book.sourceId);
- return item?'<div class="book-source-url"><span>Mã link nguồn OPDS</span><code>'+escapeHtml(sourceLinkCode(item.sourceUrl))+'</code><button type="button" data-book-source-copy="'+escapeHtml(item.id)+'">Sao chép link gốc</button></div>':'';
+ return item?'<small class="book-source-code" aria-label="Mã link nguồn OPDS">'+escapeHtml(sourceLinkCode(item.sourceUrl))+'</small>':'';
 }
 function filtered(){
  const q=$('#search').value.trim().toLocaleLowerCase(),language=$('#language').value,format=$('#format').value;
@@ -257,7 +255,6 @@ document.addEventListener('click',async event=>{
   sourceImportErrors.splice(Number(button.dataset.importDelete),1);updateUrlCount();notice('Đã xóa link lỗi khỏi ô nhập. Các nguồn đã thêm vẫn được giữ.');return;
  }
  if(button.dataset.bookDelete){const book=source().get(button.dataset.bookDelete);if(!book||!book.external||!confirm('Loại “'+book.title+'” khỏi catalog tổng hợp? Sách gốc ở nguồn OPDS không bị xóa.'))return;button.disabled=true;try{await hideExternalBooks([book]);notice('Đã loại sách khỏi catalog tổng hợp.');}catch(e){button.disabled=false;notice(e.message,true);}return;}
- if(button.dataset.bookSourceCopy){const item=sources.find(source=>source.id===button.dataset.bookSourceCopy);if(!item)return;try{await navigator.clipboard.writeText(item.sourceUrl);notice('Đã sao chép link gốc của nguồn OPDS.');}catch{notice('Trình duyệt không cho sao chép tự động. Link gốc đang hiện ngay dưới sách để bạn sao chép thủ công.',true);}return;}
  if(button.dataset.tab)tab(button.dataset.tab);
  if(button.dataset.close)$('#'+button.dataset.close).close();
  if(button.dataset.open)openBook(button.dataset.open);
@@ -360,12 +357,6 @@ async function loadHiddenHistory(){
  finally{button.disabled=false;}
 }
 $('#load-hidden-history').addEventListener('click',loadHiddenHistory);
-$('#hidden-history-list').addEventListener('click',async event=>{
- const copy=event.target.closest('[data-history-copy]');if(!copy)return;
- const source=sources.find(item=>item.id===copy.dataset.historyCopy);if(!source)return;
- try{await navigator.clipboard.writeText(source.sourceUrl);notice('Đã sao chép link gốc của nguồn OPDS.');}
- catch{notice('Trình duyệt không cho sao chép tự động. Link gốc đang hiện để bạn sao chép thủ công.',true);}
-});
 $('#source-list').addEventListener('change',async event=>{
  const selectedInput=event.target.closest('[data-source-select]');if(selectedInput){selectedInput.checked?selectedSourceIds.add(selectedInput.dataset.sourceSelect):selectedSourceIds.delete(selectedInput.dataset.sourceSelect);renderSources();return;}
  const input=event.target.closest('[data-source-toggle]');if(!input)return;try{const data=await api(endpoint('/sources/'+input.dataset.sourceToggle),'PATCH',{enabled:input.checked});sources=data.sources;renderSources();}catch(e){input.checked=!input.checked;notice(e.message,true);}
