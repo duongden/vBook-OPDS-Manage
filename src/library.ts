@@ -376,6 +376,14 @@ async function listSources(c: C) {
 }
 
 api.get('/api/libraries/:id/sources', async c => c.json({ sources: await listSources(c) }));
+api.post('/api/libraries/:id/sources/match', async c => {
+  const body = await jsonBody(c), lib = c.get('library');
+  if (!Array.isArray(body.urls) || body.urls.length > 99) fail(400, 'Đối chiếu tối đa 99 URL OPDS mỗi lần.');
+  const urls = (body.urls as unknown[]).map(url => stringInput(url, 2048, 'URL OPDS', true));
+  const rows = (await c.env.DB.prepare('SELECT * FROM opds_sources WHERE library_id = ?').bind(lib.id).all<OpdsSourceRow>()).results;
+  const saved = new Set((await Promise.all(rows.map(async row => (await sourceConfig(c.env.MASK_SECRET, row)).url))));
+  return c.json({ existing: urls.flatMap((url, index) => { try { return saved.has(safeOpdsUrl(url).href) ? [index] : []; } catch { return []; } }) });
+});
 api.post('/api/libraries/:id/sources/check', async c => {
   const body = await jsonBody(c), lib = c.get('library');
   if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 5) fail(400, 'Kiểm tra từ 1 đến 5 nguồn OPDS mỗi lần.');

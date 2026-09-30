@@ -416,6 +416,13 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.equal(d.querySelector('#notice')!.textContent,'Đã thêm và kiểm tra 11 nguồn OPDS.');
     assert.equal(d.querySelector('#source-url-count')!.textContent,'Đã nhập 0 / 99 URL OPDS');
     assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,11);
+    assert.ok(!(await(await h.req(base(a)+'/sources')).json() as any).sources[0].sourceUrl,'saved feed URL stays private in the source list');
+    assert.deepEqual((await(await h.req(base(a)+'/sources/match','POST',{urls:['https://catalog.example/opds?item=0','https://catalog.example/new']})).json() as any).existing,[0]);
+    source.value=Array.from({length:11},(_,i)=>`https://catalog.example/opds?item=${i}`).join('\n');
+    form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    for(let i=0;i<300&&!d.querySelector('#source-form .form-error');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.match(d.querySelector('#source-form .form-error')!.textContent!,/11 URL OPDS đã có trong thư viện/);
+    assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,11);
     source.value=Array.from({length:11},(_,i)=>i===7?'https://catalog.example/invalid':i===8?'https://catalog.example/invalid-two':`https://catalog.example/extra?item=${i}`).join('\n');
     form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
     for(let i=0;i<300&&!d.querySelector('[data-import-delete]');i++)await new Promise(resolve=>setTimeout(resolve,5));
@@ -448,12 +455,13 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.equal(bulk.hidden,true);
   }finally{unavailableSource=false;dom.window.close();}
 });
-test('creating a library with eleven OPDS links imports every source',async()=>{
+test('creating a library with 25 OPDS links finishes import before opening credentials',async()=>{
   const h=harness(),dom=new JSDOM(libraryHtml,{url:'https://library.example/',runScripts:'outside-only'}),w=dom.window,d=w.document;
   let cookie='';
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
   w.AbortController=globalThis.AbortController as any;
   w.fetch=(async(path:string,init:any={})=>{
+    if(path.includes('/sources')&&init.method==='POST')assert.equal(d.querySelector('#connection')!.hasAttribute('open'),false,'credentials dialog opens after the import');
     const response=await app.request('https://library.example'+path,{...init,headers:{...(cookie?{Cookie:cookie}:{}),...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any);
     if(response.headers.has('set-cookie'))cookie=response.headers.get('set-cookie')!.split(';')[0];
     return response;
@@ -461,16 +469,18 @@ test('creating a library with eleven OPDS links imports every source',async()=>{
   try{
     w.eval(libraryClient);
     const form=d.querySelector('#create') as HTMLFormElement;
-    (form.elements.namedItem('drive') as HTMLTextAreaElement).value=Array.from({length:11},(_,i)=>`https://catalog.example/opds?create=${i}`).join('\n');
+    (form.elements.namedItem('drive') as HTMLTextAreaElement).value=Array.from({length:25},(_,i)=>i===11?'https://catalog.example/invalid':`https://catalog.example/opds?create=${i}`).join('\n');
     (form.elements.namedItem('name') as HTMLInputElement).value='Kệ chung';
     (form.elements.namedItem('username') as HTMLInputElement).value='owner';
     (form.elements.namedItem('password') as HTMLInputElement).value='long-password-123';
     form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
-    for(let i=0;i<300&&d.querySelector('#notice')!.textContent!=='Đã thêm và kiểm tra 11 nguồn OPDS.';i++)await new Promise(resolve=>setTimeout(resolve,5));
-    assert.equal(d.querySelector('#notice')!.textContent,'Đã thêm và kiểm tra 11 nguồn OPDS.');
-    assert.equal(d.querySelectorAll('.source-row').length,11);
-    for(let i=0;i<300&&d.querySelectorAll('.book').length<11;i++)await new Promise(resolve=>setTimeout(resolve,5));
-    assert.ok(d.querySelectorAll('.book').length>=11,'OPDS-only library loads books automatically');
+    for(let i=0;i<300&&!d.querySelector('#notice')!.textContent!.includes('Đã thêm 24 / 25 nguồn OPDS');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.match(d.querySelector('#notice')!.textContent!,/Đã thêm 24 \/ 25 nguồn OPDS/);
+    assert.equal(d.querySelector('#connection')!.hasAttribute('open'),true);
+    assert.equal(d.querySelectorAll('#source-list .source-row').length,24);
+    assert.equal((d.querySelector('#source-form textarea[name="urls"]') as HTMLTextAreaElement).value,'https://catalog.example/invalid');
+    for(let i=0;i<300&&d.querySelectorAll('.book').length<24;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.ok(d.querySelectorAll('.book').length>=24,'OPDS-only library loads books automatically');
     for(let i=0;i<300&&!d.querySelector('#scan-status')!.textContent!.includes('Hoàn tất');i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.match(d.querySelector('#scan-status')!.textContent!,/Hoàn tất/);
     assert.equal((form.elements.namedItem('drive') as HTMLTextAreaElement).value,'');
