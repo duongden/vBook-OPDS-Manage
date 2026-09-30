@@ -460,6 +460,10 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.equal((d.querySelector('#delete-selected-sources') as HTMLButtonElement).textContent,'Xóa hàng loạt (0)');
     assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources[0].sourceUrl,'https://catalog.example/opds?item=0');
     assert.ok(d.querySelector('#source-list')!.textContent!.includes('https://catalog.example/opds?item=0'));
+    const firstSource=d.querySelector('#source-list .source-row')!;
+    assert.ok(firstSource.firstElementChild!.classList.contains('source-select'));
+    assert.equal(firstSource.querySelector('.source-select')!.textContent,'');
+    assert.ok(firstSource.querySelector('.source-select [data-source-select]'));
     assert.equal(d.querySelector('.source-bulk-actions')!.children.length,3);
     assert.equal((d.querySelector('.source-bulk-actions')!.firstElementChild as HTMLElement).id,'check-sources');
     assert.equal((d.querySelector('.source-bulk-actions')!.lastElementChild as HTMLElement).id,'delete-selected-sources');
