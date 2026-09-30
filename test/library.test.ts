@@ -416,6 +416,7 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.equal(d.querySelector('#notice')!.textContent,'Đã thêm và kiểm tra 11 nguồn OPDS.');
     assert.equal(d.querySelector('#source-url-count')!.textContent,'Đã nhập 0 / 99 URL OPDS');
     assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,11);
+    assert.equal((d.querySelector('#delete-selected-sources') as HTMLButtonElement).textContent,'Xóa hàng loạt (0)');
     assert.ok(!(await(await h.req(base(a)+'/sources')).json() as any).sources[0].sourceUrl,'saved feed URL stays private in the source list');
     assert.deepEqual((await(await h.req(base(a)+'/sources/match','POST',{urls:['https://catalog.example/opds?item=0','https://catalog.example/new']})).json() as any).existing,[0]);
     source.value=Array.from({length:11},(_,i)=>`https://catalog.example/opds?item=${i}`).join('\n');
@@ -453,6 +454,16 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.equal(d.querySelectorAll('#source-list .source-row').length,20);
     assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,20);
     assert.equal(bulk.hidden,true);
+    const choices=d.querySelectorAll('#source-list [data-source-select]');
+    (choices[0] as HTMLInputElement).click();(d.querySelectorAll('#source-list [data-source-select]')[1] as HTMLInputElement).click();
+    const selectedBulk=d.querySelector('#delete-selected-sources') as HTMLButtonElement;
+    assert.equal(selectedBulk.textContent,'Xóa hàng loạt (2)');assert.equal(selectedBulk.disabled,false);
+    selectedBulk.click();
+    for(let i=0;i<300&&d.querySelectorAll('#source-list .source-row').length!==18;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,18);
+    assert.equal(selectedBulk.textContent,'Xóa hàng loạt (0)');
+    (d.querySelector('#select-all-sources') as HTMLInputElement).click();
+    assert.equal(selectedBulk.textContent,'Xóa hàng loạt (18)');
   }finally{unavailableSource=false;dom.window.close();}
 });
 test('creating a library with 25 OPDS links finishes import before opening credentials',async()=>{
