@@ -79,16 +79,15 @@ function renderHiddenHistory(){
 async function loadSources(){
  if(!library)return;sources=(await api(endpoint('/sources'))).sources;renderSources();render();
 }
-async function enter(data,autoScan=true){
+async function enter(data){
  publicEpoch++;$('#public-library').hidden=true;
  library=data.library;csrf=data.csrf;sourceChecks.clear();sourceErrors.clear();sourceTransient.clear();sourceCheckComplete=false;selectedSourceIds.clear();pageItems.clear();scanItems.clear();selected.clear();trail=[];scanMode=false;scanResultPage=1;browsePageIndex=0;browsePages=[];scanComplete=false;scanQueue=[];scanSeen.clear();scanPages=0;
  $('#strip-opds-prefixes').checked=Boolean(library.stripOpdsPrefixes);
  $('#welcome').hidden=true;$('#dashboard').hidden=false;$('#logout').hidden=false;$('#account-button').hidden=false;$('#library-name').textContent=library.name;
  history.replaceState(null,'','/?library='+encodeURIComponent(library.id));
  $('#account-info').textContent='Mã thư viện: '+(library.shortId||library.id)+' · Tên đăng nhập: '+library.username;
- $('#scan-status').textContent='Chưa quét toàn thư viện. Số liệu hiện chỉ thuộc dữ liệu đã tải.';scanControls();
+ $('#scan-status').textContent='Chưa quét toàn thư viện. Bấm Kiểm tra toàn thư viện để bắt đầu; trang sẽ không tự quét lại.';scanControls();
  notice('');await Promise.all([browse(false),loadSources()]);if(data.opds||data.recoveryCode)showSecrets(data);
- if(autoScan&&!library.hasDrive&&sources.some(source=>source.enabled))startScan(true);
 }
 function leave(){
  pauseScan();requestEpoch++;library=null;csrf='';recoveryCode='';sources=[];sourceChecks.clear();sourceErrors.clear();sourceTransient.clear();hiddenHistory=[];$('#hidden-history-list').replaceChildren();$('#hidden-history-status').textContent='';sourceCheckComplete=false;selectedSourceIds.clear();sourceImportErrors=[];renderImportErrors();pageItems.clear();scanItems.clear();selected.clear();editing=null;scanResultPage=1;browsePageIndex=0;browsePages=[];scanQueue=[];scanSeen.clear();
@@ -159,8 +158,8 @@ async function browse(append){
 }
 function scanControls(){$('#scan-pause').hidden=!scanRunning;$('#scan-resume').hidden=scanRunning||!scanQueue.length;$('#scan-results').hidden=!scanPages;$('#scan-start').disabled=scanRunning;}
 function pauseScan(){scanEpoch++;scanRunning=false;if(scanController)scanController.abort();scanController=null;scanControls();}
-function startScan(auto=false){
- if(!auto&&scanPages&&!confirm('Quét lại toàn thư viện từ đầu?'))return;
+function startScan(){
+ if(scanPages&&!confirm('Quét lại toàn thư viện từ đầu?'))return;
  pauseScan();scanItems.clear();scanSeen.clear();scanResultPage=1;scanQueue=[...(library.hasDrive?[{}]:[]),...sources.filter(source=>source.enabled).map(source=>({sourceId:source.id}))];scanPages=0;scanComplete=false;
  if(!scanQueue.length){$('#scan-status').textContent='Chưa có nguồn Drive hoặc OPDS đang bật để quét.';return;}
  $('#scan-status').textContent='Đang tải sách từ '+sources.filter(source=>source.enabled).length+' nguồn OPDS...';scanLoop();
@@ -186,7 +185,7 @@ async function scanLoop(){
    });
    if(data.nextCursor)scanQueue.unshift({...job,cursor:data.nextCursor});
    scanComplete=scanQueue.length===0;
-   $('#scan-status').textContent=(scanComplete?'Hoàn tất — ':'Đang quét — ')+scanPages+' trang, '+scanItems.size+' file sách. '+(scanComplete?'Số liệu theo lần quét này; tải lại trang sẽ cần quét lại.':scanQueue.length+' lượt thư mục/trang còn chờ.');
+   $('#scan-status').textContent=(scanComplete?'Hoàn tất — ':'Đang quét — ')+scanPages+' trang, '+scanItems.size+' file sách. '+(scanComplete?'Kết quả được giữ trong trang này; chỉ quét lại khi bạn bấm nút. Tải lại trang sẽ cần quét thủ công.':scanQueue.length+' lượt thư mục/trang còn chờ.');
    if(scanMode){fillFilters();render();}scanControls();
   }
  }catch(error){if(epoch===scanEpoch&&error.name!=='AbortError'){$('#scan-status').textContent='Quét chưa hoàn tất. '+error.message+' Kết quả đã tải được giữ lại; bấm Tiếp tục / thử lại.';notice(error.message,true);}}
@@ -273,10 +272,9 @@ document.addEventListener('change',event=>{if(event.target.dataset.select){const
    try{await addSourceBatches(opds.slice(OPDS_BATCH_SIZE),'','',OPDS_BATCH_SIZE);}
    catch(error){importError=error;}
   }
-  form.reset();updateUrlCount();await enter(data,false);
+  form.reset();updateUrlCount();await enter(data);
   if(importError){$('#source-form').elements.urls.value=importError.remainingUrls.join('\n');sourceImportErrors=importError.failed||[];updateUrlCount();notice('Thư viện đã tạo. Đã thêm '+(OPDS_BATCH_SIZE+importError.addedCount)+' / '+opds.length+' nguồn OPDS. Mở Nguồn sách để xem và xử lý link chưa thêm. '+importError.message,true);}
-  else if(opds.length)notice('Đã thêm và kiểm tra '+opds.length+' nguồn OPDS.');
-  if(!library.hasDrive&&sources.some(source=>source.enabled))startScan(true);
+  else if(opds.length)notice('Đã thêm và kiểm tra '+opds.length+' nguồn OPDS. Bấm Kiểm tra toàn thư viện để tải sách.');
   return;
  }
  const data=await api(id==='login'?'/api/session':'/api/recovery','POST',values);form.reset();await enter(data);
@@ -297,8 +295,8 @@ $('#source-form').addEventListener('submit',event=>{event.preventDefault();const
  if(!allUrls.length)throw new Error('Nhập ít nhất một URL OPDS.');
  const existing=new Set((await api(endpoint('/sources/match'),'POST',{urls:allUrls})).existing),urls=allUrls.filter((_,index)=>!existing.has(index)),skipped=allUrls.length-urls.length;
  if(!urls.length)throw new Error('Tất cả '+skipped+' URL OPDS đã có trong thư viện; không cần thêm lại.');
- try{sourceImportErrors=[];renderImportErrors();$('#source-progress').textContent='Đang kiểm tra 0 / '+urls.length+' URL OPDS'+(skipped?' · bỏ qua '+skipped+' link đã lưu':'')+'.';notice($('#source-progress').textContent);await addSourceBatches(urls,values.username||'',values.password||'');f.reset();updateUrlCount();$('#source-progress').textContent='Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.'+(skipped?' Bỏ qua '+skipped+' link đã có.':'');notice($('#source-progress').textContent);if(!library.hasDrive)startScan(true);}
- catch(error){if(error.remainingUrls)f.elements.urls.value=error.remainingUrls.join('\n');sourceImportErrors=error.failed||[];updateUrlCount();error.message='Đã thêm '+(error.addedCount||0)+' / '+urls.length+' nguồn OPDS mới. '+(skipped?'Bỏ qua '+skipped+' link đã có. ':'')+(error.remainingUrls?'Các URL lỗi/chưa xử lý được giữ trong ô nhập. ':'')+error.message;if(error.addedCount&&!library.hasDrive)startScan(true);throw error;}
+ try{sourceImportErrors=[];renderImportErrors();$('#source-progress').textContent='Đang kiểm tra 0 / '+urls.length+' URL OPDS'+(skipped?' · bỏ qua '+skipped+' link đã lưu':'')+'.';notice($('#source-progress').textContent);await addSourceBatches(urls,values.username||'',values.password||'');f.reset();updateUrlCount();$('#source-progress').textContent='Đã thêm và kiểm tra '+urls.length+' nguồn OPDS.'+(skipped?' Bỏ qua '+skipped+' link đã có.':'')+' Bấm Kiểm tra toàn thư viện để cập nhật sách.';notice($('#source-progress').textContent);}
+ catch(error){if(error.remainingUrls)f.elements.urls.value=error.remainingUrls.join('\n');sourceImportErrors=error.failed||[];updateUrlCount();error.message='Đã thêm '+(error.addedCount||0)+' / '+urls.length+' nguồn OPDS mới. '+(skipped?'Bỏ qua '+skipped+' link đã có. ':'')+(error.remainingUrls?'Các URL lỗi/chưa xử lý được giữ trong ô nhập. ':'')+error.message+(error.addedCount?' Bấm Kiểm tra toàn thư viện để cập nhật sách.':'');throw error;}
  });});
 $('#check-sources').addEventListener('click',async()=>{
  const button=$('#check-sources'),status=$('#source-check-status'),ids=sources.map(source=>source.id);

@@ -621,9 +621,13 @@ test('reopened library identifies a failed saved OPDS URL and lets owner remove 
   const dom=new JSDOM(libraryHtml,{url:'https://library.example/?library='+a.library.id,runScripts:'outside-only'}),w=dom.window,d=w.document;
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.confirm=()=>true;
   w.AbortController=globalThis.AbortController as any;
-  w.fetch=(async(path:string,init:any={})=>path.endsWith('/scan')?new Response('<!DOCTYPE html><title>Upstream error</title>',{status:502,headers:{'Content-Type':'text/html'}}):app.request('https://library.example'+path,{...init,headers:{Cookie:h.cookie,...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any)) as any;
+  let scanCalls=0;
+  w.fetch=(async(path:string,init:any={})=>{if(path.endsWith('/scan')){scanCalls++;return new Response('<!DOCTYPE html><title>Upstream error</title>',{status:502,headers:{'Content-Type':'text/html'}});}return app.request('https://library.example'+path,{...init,headers:{Cookie:h.cookie,...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any);}) as any;
   try{
     w.eval(libraryClient);
+    for(let i=0;i<300&&!d.querySelector('#source-list .source-row');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal(scanCalls,0,'reopening a library does not scan automatically');
+    (d.querySelector('#scan-start') as HTMLButtonElement).click();
     for(let i=0;i<300&&!d.querySelector('#notice')!.textContent!.includes('Tạm thời không kết nối');i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.ok(!d.querySelector('#notice')!.textContent!.includes('https://catalog.example/broken'));
     assert.match(d.querySelector('#source-list')!.textContent!,/URL gốc: https:\/\/catalog\.example\/broken/);
@@ -642,8 +646,9 @@ test('URL counters show unique links and the source form adds more than ten in b
   const dom=new JSDOM(libraryHtml,{url:'https://library.example/',runScripts:'outside-only'}),w=dom.window,d=w.document;
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
   w.confirm=()=>true;
-  let cookie=h.cookie;
+  let cookie=h.cookie,scanCalls=0;
   w.fetch=(async(path:string,init:any={})=>{
+    if(path.endsWith('/scan')&&init.method==='POST')scanCalls++;
     const response=await app.request('https://library.example'+path,{...init,headers:{Cookie:cookie,...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any);
     if(response.headers.has('set-cookie'))cookie=response.headers.get('set-cookie')!.split(';')[0];
     return response;
@@ -666,8 +671,9 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.match(d.querySelector('#source-url-count')!.textContent!,/11 \/ 99 URL OPDS/);
     const form=d.querySelector('#source-form') as HTMLFormElement;
     form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
-    for(let i=0;i<300&&d.querySelector('#notice')!.textContent!=='Đã thêm và kiểm tra 11 nguồn OPDS.';i++)await new Promise(resolve=>setTimeout(resolve,5));
-    assert.equal(d.querySelector('#notice')!.textContent,'Đã thêm và kiểm tra 11 nguồn OPDS.');
+    for(let i=0;i<300&&!d.querySelector('#notice')!.textContent!.startsWith('Đã thêm và kiểm tra 11 nguồn OPDS.');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.match(d.querySelector('#notice')!.textContent!,/Bấm Kiểm tra toàn thư viện để cập nhật sách/);
+    assert.equal(scanCalls,0,'adding sources does not scan automatically');
     assert.equal(d.querySelector('#source-url-count')!.textContent,'Đã nhập 0 / 99 URL OPDS');
     assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,11);
     assert.equal((d.querySelector('#delete-selected-sources') as HTMLButtonElement).textContent,'Xóa hàng loạt (0)');
@@ -730,11 +736,12 @@ test('URL counters show unique links and the source form adds more than ten in b
 });
 test('creating a library with 25 OPDS links finishes import before opening credentials',async()=>{
   const h=harness(),dom=new JSDOM(libraryHtml,{url:'https://library.example/',runScripts:'outside-only'}),w=dom.window,d=w.document;
-  let cookie='';
+  let cookie='',scanCalls=0;
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
   w.AbortController=globalThis.AbortController as any;
   w.fetch=(async(path:string,init:any={})=>{
     if(path.includes('/sources')&&init.method==='POST')assert.equal(d.querySelector('#connection')!.hasAttribute('open'),false,'credentials dialog opens after the import');
+    if(path.endsWith('/scan')&&init.method==='POST')scanCalls++;
     const response=await app.request('https://library.example'+path,{...init,headers:{...(cookie?{Cookie:cookie}:{}),...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any);
     if(response.headers.has('set-cookie'))cookie=response.headers.get('set-cookie')!.split(';')[0];
     return response;
@@ -752,10 +759,14 @@ test('creating a library with 25 OPDS links finishes import before opening crede
     assert.equal(d.querySelector('#connection')!.hasAttribute('open'),true);
     assert.equal(d.querySelectorAll('#source-list .source-row').length,24);
     assert.equal((d.querySelector('#source-form textarea[name="urls"]') as HTMLTextAreaElement).value,'https://catalog.example/invalid');
+    assert.equal(scanCalls,0,'creating an OPDS-only library does not start a full scan');
+    assert.match(d.querySelector('#scan-status')!.textContent!,/Chưa quét toàn thư viện/);
+    (d.querySelector('#scan-start') as HTMLButtonElement).click();
     for(let i=0;i<300&&d.querySelectorAll('#items tbody tr').length<24;i++)await new Promise(resolve=>setTimeout(resolve,5));
-    assert.ok(d.querySelectorAll('#items tbody tr').length>=24,'OPDS-only library loads books automatically');
+    assert.ok(d.querySelectorAll('#items tbody tr').length>=24,'books load after the manual scan starts');
     for(let i=0;i<300&&!d.querySelector('#scan-status')!.textContent!.includes('Hoàn tất');i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.match(d.querySelector('#scan-status')!.textContent!,/Hoàn tất/);
+    assert.ok(scanCalls>0);
     assert.equal((form.elements.namedItem('drive') as HTMLTextAreaElement).value,'');
   }finally{dom.window.close();}
 });
