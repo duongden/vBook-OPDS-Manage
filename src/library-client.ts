@@ -14,7 +14,7 @@ function setOpdsTitles(book){if(book.external&&!book.isFolder){book.title=librar
 function savedTheme(){try{const value=localStorage.getItem('vbook-theme');if(value==='light'||value==='dark')return value;}catch{}return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
 function applyTheme(theme,persist=false){document.documentElement.dataset.theme=theme;const toggle=$('#theme-toggle'),dark=theme==='dark';toggle.textContent=dark?'☀':'☾';toggle.setAttribute('aria-pressed',String(dark));toggle.setAttribute('aria-label',dark?'Chuyển sang giao diện sáng':'Chuyển sang giao diện tối');toggle.title=dark?'Giao diện sáng':'Giao diện tối';if(persist)try{localStorage.setItem('vbook-theme',theme);}catch{}}
 let theme=savedTheme();applyTheme(theme);
-let library=null,csrf='',pageItems=new Map(),scanItems=new Map(),selected=new Set(),view='grid',scanMode=false,scanResultPage=1,browsePageIndex=0,browsePages=[];
+let library=null,csrf='',pageItems=new Map(),scanItems=new Map(),selected=new Set(),view='table',scanMode=false,scanResultPage=1,browsePageIndex=0,browsePages=[];
 let trail=[],nextCursor=null,busy=false,editing=null,scanQueue=[],scanSeen=new Set(),scanRunning=false,scanComplete=false,scanPages=0,scanController=null;
 let recoveryCode='',requestEpoch=0,scanEpoch=0,sources=[],sourceChecks=new Map(),sourceErrors=new Map(),sourceTransient=new Set(),sourceImportErrors=[],sourceCheckComplete=false,bulkDeletingFailed=false,selectedSourceIds=new Set(),bulkDeletingSelected=false;
 let hiddenHistory=[];
@@ -407,7 +407,7 @@ function renderPublic(){
   let image='';try{const url=new URL(cover);if(url.protocol==='https:')image='<img src="'+escapeHtml(url.href)+'" alt="Bìa '+escapeHtml(title)+'" loading="lazy" referrerpolicy="no-referrer">';}catch{}
   return '<article class="public-card"><div class="cover"><div class="fallback"><strong>SÁCH</strong></div>'+image+'</div><h3>'+escapeHtml(title)+'</h3><p>'+escapeHtml(author||'Chưa có tác giả')+'</p>'+(download?'<a class="primary action-button" href="'+escapeHtml(download)+'" download>Tải sách</a>':'')+'</article>';
  });
- $('#public-items').innerHTML=navCards.length||bookCards.length?'<div class="books">'+[...navCards,...bookCards].join('')+'</div>':'<div class="empty">'+(publicBusy?'Đang tải sách…':hasNext?'Chưa có sách trong phần đã quét. Bấm Trang sau để tiếp tục.':'Không tìm thấy sách phù hợp.')+'</div>';
+ $('#public-items').innerHTML=navCards.length||bookCards.length?'<div class="public-list">'+[...navCards,...bookCards].join('')+'</div>':'<div class="empty">'+(publicBusy?'Đang tải sách…':hasNext?'Chưa có sách trong phần đã quét. Bấm Trang sau để tiếp tục.':'Không tìm thấy sách phù hợp.')+'</div>';
  $('#public-status').textContent=publicBusy?'Đang tìm và tải trang sách…':page.publications.length+' sách · '+navigation.length+' danh mục trên trang'+(hasNext?' · còn trang sau':'')+(publicWarning?' · '+publicWarning:'');
  $('#public-page-label').textContent='Trang '+(publicPageIndex+1)+(hasNext?' · còn tiếp':'');
  $('#public-prev').hidden=publicPageIndex===0;$('#public-next').hidden=!hasNext&&publicPageIndex>=publicPages.length-1;

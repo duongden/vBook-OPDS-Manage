@@ -163,7 +163,7 @@ URL:      https://vbook-opds.example/o/THUVIENMAU12
 
 ### Chia sẻ thư viện để xem trên web
 
-Sao chép URL của trang quản lý có dạng `https://vbook-opds.example/?library=MA_THU_VIEN` và gửi cho người khác. Người chưa đăng nhập sẽ thấy kệ **chỉ xem**: có thể duyệt danh mục, tìm theo tên sách/tác giả/thể loại và tải sách, không cần username hay password. Họ không thấy các nút sửa sách, xóa sách, quản lý nguồn hoặc thông tin khôi phục. Chủ thư viện đang đăng nhập vẫn thấy trang quản lý; nút **Đăng nhập quản lý** trên kệ chia sẻ đưa chủ thư viện đến form đăng nhập.
+Sao chép URL của trang quản lý có dạng `https://vbook-opds.example/?library=MA_THU_VIEN` và gửi cho người khác. Người chưa đăng nhập sẽ thấy kệ **chỉ xem** mặc định dạng danh sách: có thể duyệt danh mục, tìm theo tên sách/tác giả/thể loại và tải sách, không cần username hay password. Họ không thấy các nút sửa sách, xóa sách, quản lý nguồn hoặc thông tin khôi phục. Chủ thư viện đang đăng nhập vẫn thấy trang quản lý, cũng mặc định dạng danh sách và có thể chuyển sang dạng kệ; nút **Đăng nhập quản lý** trên kệ chia sẻ đưa chủ thư viện đến form đăng nhập.
 
 Kết quả tìm kiếm OPDS được lấy lần lượt từ các trang và thư mục con của nguồn đang bật. Khi còn trang nguồn chưa đọc, kệ hiện **Trang sau** để tiếp tục tìm; một trang chưa có kết quả chưa có nghĩa là toàn bộ kệ không có sách phù hợp. Link chia sẻ công khai cho bất kỳ ai có link, nên chỉ thêm nguồn và sách bạn muốn chia sẻ.
 

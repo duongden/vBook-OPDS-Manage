@@ -505,7 +505,9 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     w.eval(libraryClient);
     assert.equal(d.documentElement.dataset.theme,'light');assert.equal(d.querySelector('#theme-toggle')!.textContent,'☾');click('#theme-toggle');assert.equal(d.documentElement.dataset.theme,'dark');assert.equal(d.querySelector('#theme-toggle')!.textContent,'☀');assert.equal(d.querySelector('#theme-toggle')!.getAttribute('aria-pressed'),'true');
     field('#create','drive',ROOT);field('#create','name','Thư viện UI');field('#create','username','owner');field('#create','password','ui-password-12345');submit('#create');
-    await wait(()=>d.querySelectorAll('.book').length===3&&d.querySelector('#connection')!.hasAttribute('open'));
+    await wait(()=>d.querySelectorAll('#items tbody tr').length===3&&d.querySelector('#connection')!.hasAttribute('open'));
+    assert.equal(d.querySelector('#view-table')!.getAttribute('aria-pressed'),'true');
+    click('#view-grid');assert.equal(d.querySelectorAll('#items .book').length,3);
     assert.match(d.querySelector('#connection')!.textContent!,/Để trống Tên và Mật khẩu/);
     assert.equal(d.querySelector('#secret-values [data-copy-secret="opds"]'),null);
     assert.ok(d.querySelector('#secret-values [data-copy-secret="library"]'));
@@ -570,6 +572,8 @@ test('shared library URL opens a read-only searchable shelf without login',async
     assert.equal((d.querySelector('#dashboard') as HTMLElement).hidden,true);
     assert.equal((d.querySelector('#welcome') as HTMLElement).hidden,true);
     assert.match(d.querySelector('#public-library-name')!.textContent!,/Kệ chia sẻ/);
+    assert.ok(d.querySelector('#public-items .public-list'));
+    assert.equal(d.querySelector('#public-items .books'),null);
     assert.ok(d.querySelector('#public-items')!.textContent!.includes('Sách mẫu'));
     assert.ok(d.querySelector('#public-items a[href*="/o/"]'));
     const input=d.querySelector('#public-search-input') as HTMLInputElement;input.value='Sách mẫu';
@@ -599,15 +603,15 @@ test('scan results show 50 books per page and selection stays on the visible pag
     (d.querySelector('#scan-start') as HTMLButtonElement).click();
     for(let i=0;i<300&&!d.querySelector('#scan-status')!.textContent!.startsWith('Hoàn tất');i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.match(d.querySelector('#scan-status')!.textContent!,/55 file sách/);
-    assert.equal(d.querySelectorAll('#items .book').length,50);
+    assert.equal(d.querySelectorAll('#items tbody tr').length,50);
     assert.equal(d.querySelector('#page-label')!.textContent,'Trang 1 / 2');
     (d.querySelector('#load-more') as HTMLButtonElement).click();
-    assert.equal(d.querySelectorAll('#items .book').length,5);
+    assert.equal(d.querySelectorAll('#items tbody tr').length,5);
     assert.equal(d.querySelector('#page-label')!.textContent,'Trang 2 / 2');
     (d.querySelector('#select-all') as HTMLInputElement).click();
     assert.equal(d.querySelector('#selected-count')!.textContent,'5 đã chọn');
     (d.querySelector('#page-prev') as HTMLButtonElement).click();
-    assert.equal(d.querySelectorAll('#items .book').length,50);
+    assert.equal(d.querySelectorAll('#items tbody tr').length,50);
     assert.equal((d.querySelector('#select-all') as HTMLInputElement).checked,false);
   }finally{tree.set(ROOT,original!);dom.window.close();}
 });
@@ -748,8 +752,8 @@ test('creating a library with 25 OPDS links finishes import before opening crede
     assert.equal(d.querySelector('#connection')!.hasAttribute('open'),true);
     assert.equal(d.querySelectorAll('#source-list .source-row').length,24);
     assert.equal((d.querySelector('#source-form textarea[name="urls"]') as HTMLTextAreaElement).value,'https://catalog.example/invalid');
-    for(let i=0;i<300&&d.querySelectorAll('.book').length<24;i++)await new Promise(resolve=>setTimeout(resolve,5));
-    assert.ok(d.querySelectorAll('.book').length>=24,'OPDS-only library loads books automatically');
+    for(let i=0;i<300&&d.querySelectorAll('#items tbody tr').length<24;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.ok(d.querySelectorAll('#items tbody tr').length>=24,'OPDS-only library loads books automatically');
     for(let i=0;i<300&&!d.querySelector('#scan-status')!.textContent!.includes('Hoàn tất');i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.match(d.querySelector('#scan-status')!.textContent!,/Hoàn tất/);
     assert.equal((form.elements.namedItem('drive') as HTMLTextAreaElement).value,'');
