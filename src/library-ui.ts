@@ -7,12 +7,12 @@ export const libraryHtml = String.raw`<!doctype html>
 <form id="create" class="access-form"><h2>Tạo thư viện của bạn</h2><p class="muted">Gộp nhiều nguồn thành một catalog duy nhất cho vBook.</p><label>Danh sách link Google Drive / OPDS <small>Mỗi dòng một URL HTTPS; tối đa 99 OPDS và một thư mục Drive. Link trùng sẽ bỏ qua.</small><textarea name="drive" rows="4" maxlength="210000" aria-describedby="create-url-count" placeholder="https://catalog-one.example/opds&#10;https://catalog-two.example/feed.xml"></textarea><small id="create-url-count" aria-live="polite">Đã nhập 0 / 99 URL OPDS · 0 / 1 link Drive</small></label><div class="form-grid"><label>Tên thư viện<input name="name" required maxlength="120" placeholder="Góc sách của tôi"></label><label>Tên đăng nhập quản lý<input name="username" required maxlength="80" autocomplete="username"></label></div><label>Mật khẩu quản lý<input name="password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"><small>Ít nhất 12 ký tự. vBook sẽ dùng mật khẩu OPDS riêng.</small></label><button class="primary" type="submit">Tạo catalog tổng hợp</button></form>
 <form id="login" class="access-form" hidden><h2>Trở lại thư viện</h2><label>Mã thư viện<input name="libraryId" required maxlength="80" autocomplete="off"></label><label>Tên đăng nhập<input name="username" required maxlength="80" autocomplete="username"></label><label>Mật khẩu<input name="password" type="password" required maxlength="256" autocomplete="current-password"></label><button class="primary">Đăng nhập</button></form>
 <form id="recovery" class="access-form" hidden><h2>Khôi phục tài khoản</h2><p class="muted">Mã khôi phục chỉ dùng một lần. Các phiên cũ và mật khẩu OPDS cũ sẽ bị thu hồi.</p><label>Mã thư viện<input name="libraryId" required maxlength="80"></label><label>Mã khôi phục<input name="code" required maxlength="100" autocomplete="off"></label><label>Mật khẩu mới<input name="password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"></label><button class="primary">Khôi phục</button></form></div></section>
-<section id="dashboard" hidden><div class="section-head"><div><p class="eyebrow">THƯ VIỆN CỦA BẠN</p><h1 id="library-name">Thư viện</h1><p class="muted">Quản lý sách Drive và các nguồn OPDS được chia sẻ.</p></div><div class="section-actions"><button id="sources-button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></svg>Nguồn sách <span id="source-count" class="button-count">0</span></button><button id="opds-button" class="primary">Kết nối vBook</button></div></div>
+<section id="dashboard" hidden><div class="section-head"><div><p class="eyebrow">THƯ VIỆN CỦA BẠN</p><h1 id="library-name">Thư viện</h1><p class="muted">Quản lý sách Drive và các nguồn OPDS được chia sẻ.</p></div><div class="section-actions"><button id="bulk-delete-opds" class="danger" hidden>Xóa sách OPDS đã chọn</button><button id="sources-button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></svg>Nguồn sách <span id="source-count" class="button-count">0</span></button><button id="opds-button" class="primary">Kết nối vBook</button></div></div>
 <div id="stats" class="stats" aria-live="polite"></div><p id="formats" class="muted"></p>
 <div class="scanbar"><div><button id="scan-start">Kiểm tra toàn thư viện</button><button id="scan-pause" hidden>Tạm dừng</button><button id="scan-resume" hidden>Tiếp tục / thử lại</button><button id="scan-results" hidden>Xem kết quả quét</button></div><p id="scan-status" class="muted">Chưa quét toàn thư viện. Số liệu hiện chỉ thuộc dữ liệu đã tải.</p></div>
 <div class="tools"><label class="search">Tìm trong dữ liệu đã tải<input id="search" type="search" placeholder="Tên sách, tên file, tác giả…"></label><label>Ngôn ngữ<select id="language"><option value="">Tất cả</option><option value="unknown">Chưa rõ</option></select></label><label>Định dạng<select id="format"><option value="">Tất cả</option></select></label><label>Sắp xếp<select id="sort"><option value="title">Tên sách</option><option value="author">Tác giả</option><option value="size">Dung lượng giảm dần</option></select></label><div class="view-toggle" role="group" aria-label="Chế độ hiển thị"><button class="icon-button" id="view-grid" aria-label="Hiển thị dạng kệ" title="Dạng kệ" aria-pressed="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button><button class="icon-button" id="view-table" aria-label="Hiển thị dạng bảng" title="Dạng bảng" aria-pressed="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg></button></div></div>
 <div class="shelf-head"><nav id="breadcrumbs" aria-label="Đường dẫn thư mục"></nav><span id="result-count" class="muted"></span></div>
-<div class="bulk"><label class="check"><input id="select-all" type="checkbox"> Chọn kết quả đang hiển thị</label><span id="selected-count">0 đã chọn</span><label>Ngôn ngữ <input id="bulk-language" list="languages" placeholder="vi, en, fr…" maxlength="35"></label><button id="bulk-apply">Gán cho sách Drive</button><button id="bulk-delete-opds" class="danger" hidden>Xóa sách OPDS đã chọn</button></div>
+<div class="bulk"><label class="check"><input id="select-all" type="checkbox"> Chọn kết quả đang hiển thị</label><span id="selected-count">0 đã chọn</span><label>Ngôn ngữ <input id="bulk-language" list="languages" placeholder="vi, en, fr…" maxlength="35"></label><button id="bulk-apply">Gán cho sách Drive</button></div>
 <div id="items" aria-live="polite"></div><div class="more"><button id="load-more" hidden>Tải trang tiếp</button><button id="reload-folder">Tải lại thư mục gốc</button></div></section>
 <footer>VBook Library · Metadata riêng cho từng thư viện · Nguồn sách do bạn kiểm soát</footer></main>
 <dialog id="editor"><form id="edit-form"><div class="dialog-head"><h2>Thông tin sách</h2><button class="icon-button" type="button" data-close="editor" aria-label="Đóng" title="Đóng"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><p id="edit-source" class="muted"></p><div class="editor-grid"><div><div class="cover-preview" id="cover-preview"></div><p class="muted">Bìa lấy từ URL ảnh của bạn hoặc thumbnail Drive.</p></div><div><label>Tên hiển thị<input name="title" maxlength="240"></label><label>Tác giả<input name="author" maxlength="240"></label><div class="form-grid"><label>Ngôn ngữ<input name="language" list="languages" maxlength="35" placeholder="Chưa rõ"></label><label>Thể loại<input name="category" maxlength="120"></label></div><label>Mô tả<textarea name="description" maxlength="5000" rows="4"></textarea></label><label>URL bìa HTTPS<input name="coverUrl" type="url" maxlength="2048" placeholder="https://…"></label></div></div><p class="muted">Để trống một trường để dùng dữ liệu nguồn. Chỉnh sửa chỉ áp dụng trong thư viện này, không thay đổi file Drive.</p><p id="edit-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" id="reset-book">Khôi phục dữ liệu nguồn</button><button class="primary">Lưu thông tin</button></div></form></dialog>
@@ -236,11 +236,10 @@ input[type='checkbox'] { width: 19px; min-height: 19px; height: 19px; accent-col
 input[readonly] { background: var(--soft); }
 .form-grid { display: grid; gap: 0; }
 
-.section-head { display: grid; gap: var(--space-3); padding: var(--space-5) 0 var(--space-4); }
+.section-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding: var(--space-5) 0 var(--space-4); }
 .section-head h1 { margin-block: 8px; font-size: clamp(30px, 9vw, 42px); overflow-wrap: anywhere; }
-.section-head .primary { width: 100%; }
-.section-actions { display: grid; gap: var(--space-2); }
-.section-actions button { width: 100%; }
+.section-actions { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: var(--space-2); }
+.section-actions button { min-height: var(--control-height); padding-inline: 16px; white-space: nowrap; }
 .section-actions .icon { margin-right: 7px; vertical-align: -5px; }
 .button-count { display: inline-grid; min-width: 21px; height: 21px; margin-left: 5px; padding-inline: 5px; place-items: center; background: var(--soft); border-radius: 999px; font-size: 11px; }
 .primary .button-count { color: var(--ink); }
@@ -250,10 +249,13 @@ input[readonly] { background: var(--soft); }
 .stat span { color: var(--muted); font-size: 11px; }
 .scanbar { padding: var(--space-3) 0 var(--space-4); border-bottom: 1px solid var(--line); }
 .scanbar > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-.scanbar button { width: 100%; padding-inline: 8px; }
+.scanbar button { width: 100%; padding-inline: 14px; }
 .scanbar p { margin-bottom: 0; font-size: 13px; }
 .tools { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-5) 0 var(--space-4); }
 .tools label { margin: 0; }
+.tools label:not(.search) { position: relative; }
+.tools label:not(.search)::after { content: ''; position: absolute; right: 18px; bottom: calc((var(--control-height) - 8px) / 2); width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); pointer-events: none; }
+.tools select { appearance: none; -webkit-appearance: none; padding-inline: 14px 42px; }
 .tools .search, .tools .view-toggle { grid-column: 1 / -1; }
 .view-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); height: var(--control-height); align-self: end; }
 .view-toggle button { width: 100%; height: var(--control-height); min-height: var(--control-height); padding: 0; }
@@ -314,6 +316,7 @@ dialog #notice { position: sticky; top: 0; z-index: 2; max-height: min(35dvh, 18
 .source-error-url { display: block; overflow-wrap: anywhere; word-break: break-word; }
 .source-bulk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin: var(--space-4) 0; }
 .source-bulk-actions label { display: inline-flex; align-items: center; gap: 8px; }
+.source-bulk-actions button { padding-inline: 16px; }
 dialog {
   width: 100%;
   max-width: none;
@@ -368,6 +371,12 @@ hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
   .tabs button { padding-inline: 5px; font-size: 11px; }
 }
 
+@media (max-width: 599px) {
+  .section-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-actions button { width: 100%; white-space: normal; }
+  .section-actions #bulk-delete-opds { grid-column: 1 / -1; }
+}
+
 @media (max-width: 759px) {
   .bulk { grid-template-columns: minmax(0, 1fr) auto; overflow: hidden; }
   .bulk > label:not(.check), .bulk > button { grid-column: 1 / -1; width: 100%; }
@@ -399,10 +408,7 @@ hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
   .intro-note { padding: 32px; }
   .entry-panel { padding: 28px; }
   .form-grid { grid-template-columns: 1fr 1fr; gap: 16px; }
-  .section-head { grid-template-columns: 1fr auto; align-items: center; padding-top: 36px; }
-  .section-head .primary { width: auto; }
-  .section-actions { display: flex; }
-  .section-actions button { width: auto; }
+  .section-head { align-items: center; padding-top: 36px; }
   .source-row { grid-template-columns: minmax(0, 1fr) auto; }
   .drive-actions { grid-template-columns: auto auto; justify-content: start; }
   .source-actions { justify-content: flex-end; }
@@ -423,6 +429,11 @@ hr { margin: 24px 0; border: 0; border-top: 1px solid var(--line); }
   .editor-grid { grid-template-columns: 190px 1fr; gap: 28px; }
   .cover-preview { width: auto; }
   .dialog-actions { grid-template-columns: 1fr auto; align-items: center; }
+}
+
+@media (min-width: 1000px) {
+  .section-head { grid-template-columns: minmax(0, 1fr) auto; }
+  .section-actions { justify-content: flex-end; }
 }
 
 @media (min-width: 1100px) {
