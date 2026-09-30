@@ -100,6 +100,10 @@ function credentials(c: C, library: Pick<Library, 'id' | 'short_id'>, password: 
   const path = library.short_id ? `/o/${library.short_id}` : `/library/${library.id}/opds`;
   return { url: `${new URL(c.req.url).origin}${path}`, username: 'reader', password };
 }
+function opdsPassword(value: unknown): string {
+  if (typeof value !== 'string' || !/^[\x21-\x7e]{6,64}$/.test(value)) fail(400, 'Mật khẩu OPDS tự đặt cần 6–64 ký tự ASCII, không có khoảng trắng.');
+  return value as string;
+}
 const newShortId = () => base64url(crypto.getRandomValues(new Uint8Array(9)));
 type PreparedSource = { id: string; shortId: string; name: string; token: string };
 async function prepareSource(secret: string, libraryId: string, raw: Record<string, unknown>): Promise<PreparedSource> {
@@ -150,7 +154,7 @@ api.post('/api/libraries', async c => {
   }
   if (initialOpds.length > 10) fail(400, 'Tối đa 10 nguồn OPDS khi tạo thư viện.');
   if (folder) folder = await validateDriveFolder(c, folder);
-  const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomAccessCode(), opds = randomAccessCode();
+  const id = crypto.randomUUID(), shortId = newShortId(), recovery = randomAccessCode(), opds = body.opdsPassword === undefined || body.opdsPassword === '' ? randomAccessCode() : opdsPassword(body.opdsPassword);
   const sources = await Promise.all(initialOpds.map(async (source, index) => {
     try { return await prepareSource(c.env.MASK_SECRET, id, source); }
     catch (error) { return sourceInputError(error, index, initialOpds.length); }
@@ -220,7 +224,8 @@ api.post('/api/libraries/:id/password', async c => {
   return c.json({ csrf: await startSession(c, lib.id, lib.auth_version + 1) });
 });
 api.post('/api/libraries/:id/opds-credentials', async c => {
-  const password = randomAccessCode(), lib = c.get('library');
+  const body = await jsonBody(c), lib = c.get('library');
+  const password = body.opdsPassword === undefined || body.opdsPassword === '' ? randomAccessCode() : opdsPassword(body.opdsPassword);
   await c.env.DB.prepare('UPDATE libraries SET opds_hash = ? WHERE id = ?').bind(await digest(`reader:${password}`), lib.id).run();
   return c.json({ opds: credentials(c, lib, password) });
 });

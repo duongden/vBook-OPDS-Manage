@@ -77,13 +77,13 @@ https://drive.google.com/drive/folders/THU_MUC_MAU_123
 
 ### 2. Tạo thư viện
 
-Mở VBook Library, chọn **Tạo thư viện**. Dán **URL OPDS HTTPS thuần**, mỗi dòng một link; không dán cả cú pháp Markdown `[link](URL)` hoặc link trang chat như Discord. Có thể nhập tối đa **99 link OPDS khác nhau** và tùy chọn một link thư mục Drive. Bộ đếm ngay dưới ô nhập cho biết số link hợp lệ về mặt số lượng, dòng trùng và lúc vượt giới hạn; nội dung feed sẽ được kiểm tra khi bấm tạo. Nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự. Có thể để trống danh sách nguồn và thêm sau ở bước 3. Nếu nhập hơn 10 link, đợi thông báo hoàn tất tất cả nhóm trước khi chuyển trang; hộp thoại lưu mật khẩu OPDS chỉ mở sau bước này.
+Mở VBook Library, chọn **Tạo thư viện**. Dán **URL OPDS HTTPS thuần**, mỗi dòng một link; không dán cả cú pháp Markdown `[link](URL)` hoặc link trang chat như Discord. Có thể nhập tối đa **99 link OPDS khác nhau** và tùy chọn một link thư mục Drive. Bộ đếm ngay dưới ô nhập cho biết số link hợp lệ về mặt số lượng, dòng trùng và lúc vượt giới hạn; nội dung feed sẽ được kiểm tra khi bấm tạo. Nhập tên thư viện, tên đăng nhập và mật khẩu quản lý dài ít nhất 12 ký tự. Bạn có thể tự đặt **mật khẩu OPDS cho vBook** từ 6–64 ký tự ASCII không có khoảng trắng; để trống để hệ thống tạo mật khẩu ngẫu nhiên. Có thể để trống danh sách nguồn và thêm sau ở bước 3. Nếu nhập hơn 10 link, đợi thông báo hoàn tất tất cả nhóm trước khi chuyển trang; hộp thoại lưu mật khẩu OPDS chỉ mở sau bước này.
 
 Bấm **Tạo catalog tổng hợp** và lưu ngay:
 
 - **Mã thư viện ngắn** (12 ký tự) để đăng nhập lại; mã UUID cũ vẫn dùng được.
 - **Mã khôi phục** (16 ký tự khi cấp mới) để đặt lại mật khẩu quản lý.
-- **Mật khẩu OPDS** (16 ký tự khi cấp mới) để kết nối vBook.
+- **Mật khẩu OPDS** (mật khẩu tự đặt hoặc 16 ký tự ngẫu nhiên) để kết nối vBook.
 
 Mã khôi phục và mật khẩu OPDS chỉ hiển thị khi vừa được cấp. Không nhập mật khẩu quản lý vào vBook.
 
@@ -138,6 +138,8 @@ Nếu thư viện chỉ có nguồn OPDS, khu vực sách Drive sẽ trống; đ
 
 Trong trang quản lý, bấm **Kết nối vBook**.
 
+Nếu muốn đổi mật khẩu OPDS, nhập mật khẩu mới vào ô trong hộp này rồi bấm **Đổi mật khẩu OPDS**. Để trống ô đó nếu muốn nhận mật khẩu ngẫu nhiên mới. Mật khẩu cũ hết hiệu lực sau khi đổi; cập nhật mật khẩu trong vBook. Mật khẩu quản lý thư viện không thay đổi.
+
 ![Hộp kết nối vBook với dữ liệu giả](docs/images/ket-noi-vbook.png)
 
 1. Sao chép link OPDS.
@@ -160,7 +162,7 @@ Password: mat-khau-mau-khong-dung-that
 
 Để đăng nhập lại, nhập mã thư viện, tên đăng nhập và mật khẩu quản lý tại tab **Đăng nhập**. Nếu quên mật khẩu, dùng tab **Khôi phục** cùng mã khôi phục đã lưu.
 
-Lỗi `HTTP 404 — not an OPDS catalog at this URL` có thể do gõ nhầm số `0` thay cho chữ `o` trong `/o/`. Hãy sao chép nguyên URL từ **Kết nối vBook**. Khi chưa nhập tài khoản, URL đúng yêu cầu xác thực; mã thư viện và mã khôi phục không dùng trong vBook. Mật khẩu OPDS đã cấp trước bản cập nhật vẫn dùng được; nút **Tạo lại mật khẩu OPDS** sẽ cấp mật khẩu 16 ký tự mới và thu hồi mật khẩu OPDS cũ.
+Lỗi `HTTP 404 — not an OPDS catalog at this URL` có thể do gõ nhầm số `0` thay cho chữ `o` trong `/o/`. Hãy sao chép nguyên URL từ **Kết nối vBook**. Khi chưa nhập tài khoản, URL đúng yêu cầu xác thực; mã thư viện và mã khôi phục không dùng trong vBook. Mật khẩu OPDS đã cấp trước bản cập nhật vẫn dùng được; nút **Đổi mật khẩu OPDS** nhận mật khẩu tự đặt hoặc cấp mật khẩu ngẫu nhiên 16 ký tự khi để trống, và thu hồi mật khẩu OPDS cũ.
 
 Sau khi khôi phục, mã khôi phục, phiên đăng nhập và mật khẩu OPDS cũ hết hiệu lực. Hãy lưu thông tin mới và cập nhật vBook. Hệ thống không khôi phục qua email.
 

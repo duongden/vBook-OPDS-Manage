@@ -143,6 +143,21 @@ test('creation uses encrypted source and hashes; session CSRF, Origin and accoun
   assert.equal((await h.req('/api/session','POST',{libraryId:a.library.shortId,username:'owner',password:'  long-password-123  '})).status,200);
   const csrfRes=await h.req('/api/session');assert.match(csrfRes.headers.get('cache-control')!,/no-store/);
 });
+test('owner can choose a short OPDS password without changing the management password',async()=>{
+  const h=harness();
+  const a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kho riêng',drive:ROOT,username:'owner',password:'long-password-123',opdsPassword:'trasua'}));
+  assert.equal(a.opds.password,'trasua');
+  assert.equal((await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a))).status,200);
+  assert.equal((await h.req('/api/session','POST',{libraryId:a.library.shortId,username:'owner',password:'long-password-123'})).status,200);
+  const stored=h.db.sqlite.prepare('SELECT opds_hash FROM libraries').get() as {opds_hash:string};assert.ok(!stored.opds_hash.includes('trasua'));
+  assert.equal((await h.req(base(a)+'/opds-credentials','POST',{opdsPassword:'abc'})).status,400);
+  assert.equal((await h.req(base(a)+'/opds-credentials','POST',{opdsPassword:'bad space'})).status,400);
+  const changed=await(await h.req(base(a)+'/opds-credentials','POST',{opdsPassword:'simple123'})).json() as any;
+  assert.equal(changed.opds.password,'simple123');
+  assert.equal((await h.req('/o/'+a.library.shortId,'GET',undefined,auth(a))).status,401);
+  assert.equal((await h.req('/o/'+a.library.shortId,'GET',undefined,{Authorization:'Basic '+btoa('reader:simple123')})).status,200);
+});
+
 test('metadata survives queries, appears in XML and JSON, can be reset; download redirects', async()=>{
   const h=harness(),a=await h.create();
   const page=await(await h.req(base(a)+'/items')).json() as any;
@@ -370,6 +385,8 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     assert.ok(d.querySelector('#secret-values [data-copy-secret="library"]'));
     assert.ok((d.querySelector('#opds-url') as HTMLInputElement).value.includes('/o/'));
     click('#copy-opds');await wait(()=>d.querySelector('#notice')!.closest('dialog')?.id==='connection');
+    (d.querySelector('#custom-opds-password') as HTMLInputElement).value='trasua';click('#rotate-opds');await wait(()=>d.querySelector('#notice')!.textContent!.includes('Đã đặt mật khẩu OPDS mới'));
+    assert.ok(d.querySelector('#secret-values')!.textContent!.includes('trasua'));
     click('[data-close="connection"]');await wait(()=>!d.querySelector('#notice')!.closest('dialog'));
     click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));assert.match(d.querySelector('#drive-status')!.textContent!,/Đã kết nối/);
     field('#drive-form','drive','https://drive.google.com/drive/folders/'+ROOT);submit('#drive-form');await wait(()=>d.querySelector('#notice')!.textContent==='Đã cập nhật nguồn Google Drive.');assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');assert.equal((d.querySelector('#drive-remove') as HTMLButtonElement).hidden,false);
