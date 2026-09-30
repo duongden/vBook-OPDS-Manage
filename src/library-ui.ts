@@ -360,6 +360,7 @@ dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }
 .source-main { grid-area: details; min-width: 0; }
 .source-row h3 { margin: 0; font: 600 16px/1.35 var(--sans); overflow-wrap: anywhere; }
 .source-row p { margin: 3px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+.source-reveal { min-height: 32px; margin-top: 6px; padding: 5px 10px; font-size: 12px; }
 .source-actions { grid-area: actions; display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: var(--space-2); align-items: center; min-width: 0; }
 .source-enabled { display: flex; flex-direction: row; align-items: center; gap: 7px; margin: 0; font-size: 12px; font-weight: 500; }
 .source-actions .danger.icon-button { width: var(--control-height); padding: 0; }

@@ -426,7 +426,7 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     click('#sources-button');assert.ok(d.querySelector('#sources')!.hasAttribute('open'));assert.match(d.querySelector('#drive-status')!.textContent!,/Đã kết nối/);
     field('#drive-form','drive','https://drive.google.com/drive/folders/'+ROOT);submit('#drive-form');await wait(()=>d.querySelector('#notice')!.textContent==='Đã cập nhật nguồn Google Drive.');assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');assert.equal((d.querySelector('#drive-remove') as HTMLButtonElement).hidden,false);
     field('#source-form','urls','https://catalog.example/opds');field('#source-form','username','shared');field('#source-form','password','source-secret');submit('#source-form');
-    await wait(()=>d.querySelectorAll('.source-row').length===1);assert.equal(d.querySelector('#source-count')!.textContent,'2');assert.ok(d.querySelector('#source-list')!.textContent!.includes('Kho sách được chia sẻ'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('source-secret'));
+    await wait(()=>d.querySelectorAll('.source-row').length===1);assert.equal(d.querySelector('#source-count')!.textContent,'2');assert.ok(d.querySelector('#source-list')!.textContent!.includes('Kho sách được chia sẻ'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('source-secret'));assert.ok(!d.querySelector('#source-list')!.textContent!.includes('https://catalog.example/opds'));
     field('#source-form','urls','http://invalid.example/opds');submit('#source-form');
     await wait(()=>Boolean(d.querySelector('#source-form .form-error')));
     assert.equal(d.querySelector('#notice')!.closest('dialog')?.id,'sources');
@@ -449,6 +449,7 @@ test('UI forms, edit/reset, filters, bulk selection, full scan and logout run ag
     holdScan=true;click('#scan-start');await wait(()=>scanStarted);click('#scan-pause');holdScan=false;click('#scan-resume');
     await wait(()=>d.querySelector('#scan-status')!.textContent!.startsWith('Hoàn tất'));
     assert.match(d.querySelector('#scan-status')!.textContent!,/7 file sách/);assert.ok(d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#items')!.textContent!.includes('OPDS'));assert.ok(d.querySelector('#items')!.textContent!.includes('ước đoán'));
+    assert.ok(!d.querySelector('#items')!.textContent!.includes(' · '+(d.querySelector('[data-book-delete]') as HTMLButtonElement).dataset.bookDelete));
     const externalDelete=d.querySelector('[data-book-delete]') as HTMLButtonElement,externalDownload=d.querySelector('a[href*="/sources/"][href*="/download?ref="]');assert.ok(externalDelete);assert.ok(externalDownload);
     click('#select-all');assert.equal(d.querySelector('#selected-count')!.textContent,'7 đã chọn');assert.equal((d.querySelector('#bulk-apply') as HTMLButtonElement).disabled,false);assert.equal((d.querySelector('#bulk-delete-opds') as HTMLButtonElement).hidden,false);assert.equal(d.querySelector('#bulk-delete-opds')!.parentElement?.className,'section-actions');
     (d.querySelector('[data-book-delete]') as HTMLButtonElement).click();await wait(()=>!d.querySelector('#items')!.textContent!.includes('Sách mẫu'));assert.ok(d.querySelector('#notice')!.textContent!.includes('Đã loại sách'));
@@ -492,9 +493,13 @@ test('reopened library identifies a failed saved OPDS URL and lets owner remove 
   w.fetch=(async(path:string,init:any={})=>path.endsWith('/scan')?new Response('<!DOCTYPE html><title>Upstream error</title>',{status:502,headers:{'Content-Type':'text/html'}}):app.request('https://library.example'+path,{...init,headers:{Cookie:h.cookie,...(init.method&&init.method!=='GET'?{Origin:'https://library.example'}:{}),...init.headers}},h.env as any)) as any;
   try{
     w.eval(libraryClient);
-    for(let i=0;i<300&&!d.querySelector('#notice')!.textContent!.includes('https://catalog.example/broken');i++)await new Promise(resolve=>setTimeout(resolve,5));
-    assert.match(d.querySelector('#notice')!.textContent!,/https:\/\/catalog\.example\/broken/);
+    for(let i=0;i<300&&!d.querySelector('#notice')!.textContent!.includes('Tạm thời không kết nối');i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.ok(!d.querySelector('#notice')!.textContent!.includes('https://catalog.example/broken'));
+    assert.ok(!d.querySelector('#source-list')!.textContent!.includes('https://catalog.example/broken'));
+    (d.querySelector('#source-list [data-source-reveal]') as HTMLButtonElement).click();
     assert.match(d.querySelector('#source-list')!.textContent!,/URL gốc: https:\/\/catalog\.example\/broken/);
+    (d.querySelector('#source-list [data-source-reveal]') as HTMLButtonElement).click();
+    assert.ok(!d.querySelector('#source-list')!.textContent!.includes('https://catalog.example/broken'));
     assert.match(d.querySelector('#source-list')!.textContent!,/Tạm thời không kết nối: Máy chủ phản hồi HTTP 502/);
     assert.ok(!d.querySelector('#notice')!.textContent!.includes('Unexpected token'));
     assert.equal((d.querySelector('#delete-failed-sources') as HTMLButtonElement).hidden,true);
@@ -540,7 +545,10 @@ test('URL counters show unique links and the source form adds more than ten in b
     assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources.length,11);
     assert.equal((d.querySelector('#delete-selected-sources') as HTMLButtonElement).textContent,'Xóa hàng loạt (0)');
     assert.equal((await(await h.req(base(a)+'/sources')).json() as any).sources[0].sourceUrl,'https://catalog.example/opds?item=0');
+    assert.ok(!d.querySelector('#source-list')!.textContent!.includes('https://catalog.example/opds?item=0'));
+    (d.querySelector('#source-list [data-source-reveal]') as HTMLButtonElement).click();
     assert.ok(d.querySelector('#source-list')!.textContent!.includes('https://catalog.example/opds?item=0'));
+    (d.querySelector('#source-list [data-source-reveal]') as HTMLButtonElement).click();
     const firstSource=d.querySelector('#source-list .source-row')!;
     assert.ok(firstSource.firstElementChild!.classList.contains('source-select'));
     assert.equal(firstSource.querySelector('.source-select')!.textContent,'');
