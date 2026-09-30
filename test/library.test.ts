@@ -66,8 +66,9 @@ globalThis.fetch = (async (input: any, init?: any) => {
     const headers = new Headers(init?.headers);
     if (headers.has('authorization')) assert.equal(headers.get('authorization'), 'Basic '+btoa('shared:source-secret'), 'Upstream credential is only sent by the proxy');
     if (url.pathname === '/book.epub') return new Response('fake-epub', {headers:{'Content-Type':'application/epub+zip','Content-Disposition':'attachment; filename="sample.epub"'}});
+    if (url.pathname === '/redirect.epub') return new Response(null,{status:302,headers:{Location:'https://downloads.example/book.epub'}});
     const title = url.pathname === '/sub' ? 'Kệ con' : url.pathname === '/second' ? 'Kho thứ hai' : 'Kho sách được chia sẻ';
-    return new Response(`<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:fake:${url.pathname}</id><title>${title}</title><link rel="subsection" href="/sub"/><entry><id>urn:fake:book</id><title>Sách mẫu</title><link rel="http://opds-spec.org/acquisition" href="/book.epub" type="application/epub+zip"/><link rel="http://opds-spec.org/image" href="https://images.example/cover.jpg"/></entry></feed>`, {headers:{'Content-Type':'application/atom+xml;charset=utf-8'}});
+    return new Response(`<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:fake:${url.pathname}</id><title>${title}</title><link rel="subsection" href="/sub"/><entry><id>urn:fake:book</id><title>Sách mẫu</title><link rel="http://opds-spec.org/acquisition" href="/${url.pathname === '/redirect' ? 'redirect' : 'book'}.epub" type="application/epub+zip"/><link rel="http://opds-spec.org/image" href="https://images.example/cover.jpg"/></entry></feed>`, {headers:{'Content-Type':'application/atom+xml;charset=utf-8'}});
   }
   assert.equal(url.hostname, 'www.googleapis.com', 'Only Google API metadata is fetched by the backend');
   assert.equal(init?.method || 'GET', 'GET', 'Drive remains read-only');
@@ -236,6 +237,21 @@ test('external OPDS sources aggregate behind short authenticated proxy links', a
   const invalidBatch=await h.req(base(a)+'/sources','POST',{sources:[{url:'https://catalog.example/opds'},{url:'http://invalid.example/opds'}]});
   assert.equal(invalidBatch.status,400);assert.match((await invalidBatch.json() as any).error,/URL OPDS thứ 2\/2/);
   assert.deepEqual((await(await h.req(base(a)+'/sources')).json() as any).sources,[]);
+});
+test('source download preserves the redirect target for externally hosted book files',async()=>{
+  const h=harness(),a=await h.signIn(await h.req('/api/libraries','POST',{name:'Kệ chung',drive:'https://catalog.example/redirect',username:'owner',password:'long-password-123'}));
+  const source=(await(await h.req(base(a)+'/sources')).json() as any).sources[0];
+  const scan=await(await h.req(base(a)+'/scan','POST',{sourceId:source.id})).json() as any;
+  const book=scan.items.find((item:any)=>!item.isFolder);
+  const managed=await h.req(base(a)+'/sources/'+source.id+'/download?ref='+encodeURIComponent(book.ref));
+  assert.equal(managed.status,302);
+  assert.equal(managed.headers.get('location'),'https://downloads.example/book.epub');
+  const shelf=await(await h.req('/o/'+a.library.shortId+'/all','GET',undefined,auth(a))).text();
+  const href=shelf.match(/rel="http:\/\/opds-spec\.org\/acquisition" href="([^"]+)"/)?.[1];assert.ok(href);
+  const target=new URL(href);
+  const aggregate=await h.req(target.pathname+target.search,'GET',undefined,auth(a));
+  assert.equal(aggregate.status,302);
+  assert.equal(aggregate.headers.get('location'),'https://downloads.example/book.epub');
 });
 test('multiple pasted OPDS URLs create one aggregate catalog without Drive',async()=>{
   const h=harness();const before=driveCalls;

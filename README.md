@@ -95,6 +95,8 @@ Trong trang quản lý, bấm **Nguồn sách**. Phần **Google Drive** cho ph�
 
 Trong vBook, **Kệ tổng hợp** hiển thị sách từ các nguồn OPDS đang bật trong cùng một kệ. Gateway lần theo các trang kế tiếp và thư mục con của từng feed qua phân trang OPDS; nguồn tắt hoặc sách đã loại khỏi catalog không xuất hiện. Nếu thư viện không có Drive, link OPDS của thư viện mở thẳng kệ này. Nếu có Drive, kệ nằm trong catalog cùng với sách Drive. Link Discord hoặc trang HTML thường không phải feed OPDS và sẽ bị từ chối khi kiểm tra nguồn.
 
+Khi mở sách, nguồn OPDS có thể chuyển hướng tệp sang máy chủ tải khác. Gateway giữ link chuyển hướng để vBook nhận đúng tệp. Nếu vBook báo `Zip file is too small length=0`, `Record index 0 out of bounds` hoặc trình duyệt báo `ERR_INVALID_RESPONSE` trên đường dẫn `/sources/.../download`, hãy thử lại sau khi cập nhật Worker; các thông báo đó có thể do phản hồi tải rỗng, không đủ căn cứ để kết luận sách ở nguồn gốc bị hỏng.
+
 - Nguồn công khai: để trống username và mật khẩu.
 - Nguồn có Basic Auth: nhập tài khoản mà chủ nguồn đã cấp. Một lần thêm dùng chung tài khoản cho các URL trong ô.
 - Sau khi thêm, dùng công tắc để bật/tắt nguồn, biểu tượng sao chép để lấy link ngắn riêng, hoặc biểu tượng thùng rác để gỡ nguồn khỏi thư viện. Thao tác này không xóa sách ở máy chủ nguồn.

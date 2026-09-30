@@ -323,7 +323,7 @@ async function serveSourceDownload(c: C, row: OpdsSourceRow) {
   let response: Response;
   try { response = await fetchOpds(config, target); } catch { return fail(503, 'Không tải được sách từ nguồn OPDS.'); }
   const headers = new Headers({ 'Content-Type': response.headers.get('content-type') || 'application/octet-stream', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
-  for (const name of ['content-disposition','content-length','etag','last-modified']) { const value = response.headers.get(name); if (value) headers.set(name, value); }
+  for (const name of ['content-disposition','content-length','etag','last-modified','location']) { const value = response.headers.get(name); if (value) headers.set(name, value); }
   return new Response(response.body, { status: response.status, headers });
 }
 api.get('/api/libraries/:id/sources/:sourceId/download', async c => {

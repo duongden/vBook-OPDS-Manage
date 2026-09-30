@@ -6,6 +6,11 @@ const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
 const { Miniflare, convertV4MiniflareOptions } = wranglerRequire('miniflare');
 const outboundService = async request => {
   const url=new URL(request.url);
+  if(url.origin==='https://catalog.example') {
+    if(url.pathname==='/redirect.epub') return new Response(null,{status:302,headers:{Location:'https://downloads.example/book.epub'}});
+    assert.equal(url.pathname,'/opds');
+    return new Response('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><id>urn:runtime:opds</id><title>Runtime OPDS</title><entry><id>urn:runtime:book</id><title>Book</title><link rel="http://opds-spec.org/acquisition" href="/redirect.epub" type="application/epub+zip"/></entry></feed>',{headers:{'Content-Type':'application/atom+xml'}});
+  }
   assert.equal(url.origin,'https://www.googleapis.com');
   assert.equal(request.method,'GET');assert.equal(url.searchParams.has('alt'),false);
   if(url.pathname==='/drive/v3/files/ROOT_LIBRARY_12345') return Response.json({id:'ROOT_LIBRARY_12345',mimeType:'application/vnd.google-apps.folder'});
@@ -31,6 +36,12 @@ try {
   const updated=await mf.dispatchFetch(base+'/books/'+book.key,{method:'PUT',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':data.csrf},body:JSON.stringify({ref:book.ref,title:'Tên sửa',language:'vi',author:'Tác giả',coverUrl:'https://images.example/book.png'})});
   assert.equal(updated.status,200,await updated.text());
   const feed=await mf.dispatchFetch(data.opds.url,{headers:{Authorization:'Basic '+btoa('reader:'+data.opds.password)}});assert.equal(feed.status,200);const xml=await feed.text();assert.match(xml,/Tên sửa.epub/);assert.match(xml,/<dc:language>vi<\/dc:language>/);
+  const source=await mf.dispatchFetch(base+'/sources',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':data.csrf},body:JSON.stringify({sources:[{url:'https://catalog.example/opds'}]})});assert.equal(source.status,201,await source.text());
+  const sourceId=(await (await mf.dispatchFetch(base+'/sources',{headers:{Cookie:cookie}})).json()).sources[0].id;
+  const scanned=await mf.dispatchFetch(base+'/scan',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':data.csrf},body:JSON.stringify({sourceId})});assert.equal(scanned.status,200);
+  const scannedBook=(await scanned.json()).items.find(item=>!item.isFolder);
+  const download=await mf.dispatchFetch(base+'/sources/'+sourceId+'/download?ref='+encodeURIComponent(scannedBook.ref),{headers:{Cookie:cookie},redirect:'manual'});
+  assert.equal(download.status,302);assert.equal(download.headers.get('location'),'https://downloads.example/book.epub');
   const rows=await db.prepare('SELECT data FROM book_overrides WHERE library_id = ?').bind(data.library.id).all();assert.equal(rows.results.length,1);
-  console.log('PASS: bundled Worker, real local D1 migration, Web Crypto, session cookies, metadata update and OPDS XML.');
+  console.log('PASS: bundled Worker, real local D1 migration, Web Crypto, session cookies, OPDS XML and external book download redirect.');
 } finally {await mf.dispose();}
